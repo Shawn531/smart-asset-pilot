@@ -1,5 +1,5 @@
 import requests
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TICKER_NAMES
 
 API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
@@ -99,7 +99,9 @@ def send_report(report: dict):
         for s in stocks:
             emoji = _sentiment_emoji(s.get("sentiment", ""))
             label = s.get("sentiment", "中性")
-            lines.append(f"\n<b>{s['ticker']}</b>  {emoji} {label}")
+            ticker = s['ticker']
+            display = TICKER_NAMES.get(ticker, ticker)
+            lines.append(f"\n<b>{display}</b>  {emoji} {label}")
             for pt in s.get("key_points", []):
                 lines.append(f"  • {pt}")
             url = s.get("source_url", "")

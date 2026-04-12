@@ -16,8 +16,15 @@ WATCHLIST = [
     "2383.TW",
     "3715.TW",
     "NVDA",
-    
 ]
+
+TICKER_NAMES = {
+    "2330.TW": "台積電",
+    "2308.TW": "台達電",
+    "2383.TW": "台光電",
+    "3715.TW": "定穎投控",
+    "NVDA": "NVDA",
+}
 
 # 大盤指數
 MARKET_INDICES = {
