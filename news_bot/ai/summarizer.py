@@ -42,7 +42,7 @@ def summarize_systemic_news(articles: list[dict], market_summary: str) -> dict:
 }}"""
 
     response = client.models.generate_content(
-        model="gemini-2.0-flash-lite",
+        model="gemini-1.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction="你是一位專業的金融分析師助理，負責生成每日金融早報。請務必以繁體中文回覆，並嚴格輸出指定的 JSON 格式，不要加任何其他文字。",
@@ -90,7 +90,7 @@ def summarize_stock_news(stock_articles: list[dict]) -> list[dict]:
 ]"""
 
     response = client.models.generate_content(
-        model="gemini-2.0-flash-lite",
+        model="gemini-1.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction="你是一位專業的金融分析師，負責分析個股新聞。請務必以繁體中文回覆，並嚴格輸出指定的 JSON 格式，不要加任何其他文字。",
