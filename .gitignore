@@ -1,0 +1,7 @@
+.env
+news_bot/venv/
+news_bot/output/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store

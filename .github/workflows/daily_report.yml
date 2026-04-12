@@ -1,0 +1,32 @@
+name: Daily Market Report
+
+on:
+  schedule:
+    # 台灣時間每個工作天 08:30 = UTC 00:30
+    - cron: '30 0 * * 1-5'
+  workflow_dispatch:  # 允許手動觸發
+
+jobs:
+  run-report:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r news_bot/requirements.txt
+
+      - name: Run daily report
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          cd news_bot
+          python main.py

@@ -1,0 +1,5 @@
+requests
+yfinance
+feedparser
+python-dotenv
+google-genai

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C c:/Users/user/smart-asset-pilot log --oneline -10)"
+    ]
+  }
+}
