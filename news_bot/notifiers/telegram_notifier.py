@@ -19,6 +19,33 @@ def _send(text: str):
             print(f"[Telegram] 發送失敗: {resp.text}")
 
 
+def _market_table(us: dict, asia: dict) -> str:
+    """將大盤數據格式化成對齊表格，漲跌幅套用顏色 emoji"""
+    rows = ["<pre>"]
+    rows.append(f"{'指數':<14}{'價格':>12}  漲跌幅")
+    rows.append("─" * 32)
+
+    def row(name, d):
+        if "error" in d:
+            return
+        color = "🔴" if d["change"] >= 0 else "🟢"
+        sign  = "+" if d["change"] >= 0 else ""
+        pct   = f"{color}{sign}{d['change_pct']}%"
+        # CJK 字元佔 2 格，補空白讓欄位對齊
+        cjk   = sum(1 for c in name if ord(c) > 0x2E7F)
+        pad   = 14 - len(name) - cjk
+        rows.append(f"{name}{' ' * pad}{d['price']:>12,.2f}  {pct}")
+
+    for name, d in us.items():
+        row(name, d)
+    rows.append("─" * 32)
+    for name, d in asia.items():
+        row(name, d)
+
+    rows.append("</pre>")
+    return "\n".join(rows)
+
+
 def _sentiment_emoji(sentiment: str) -> str:
     return {"多": "🔴", "空": "🟢", "中性": "⚪"}.get(sentiment, "⚪")
 
@@ -62,14 +89,7 @@ def send_report(report: dict):
     lines.append("<b>【大盤數據】</b>")
     us = report["market_data"].get("us", {})
     asia = report["market_data"].get("asia", {})
-    for name, d in us.items():
-        if "error" not in d:
-            arrow = "▲" if d["change"] >= 0 else "▼"
-            lines.append(f"  {name}: {d['price']} {arrow}{abs(d['change_pct'])}%")
-    for name, d in asia.items():
-        if "error" not in d:
-            arrow = "▲" if d["change"] >= 0 else "▼"
-            lines.append(f"  {name}: {d['price']} {arrow}{abs(d['change_pct'])}%")
+    lines.append(_market_table(us, asia))
 
     # ── 大盤總結 ──
     if report.get("market_overview"):
@@ -124,14 +144,7 @@ def send_dry_run_report(report: dict):
     lines.append("<b>【大盤數據】</b>")
     us = report["market_data"].get("us", {})
     asia = report["market_data"].get("asia", {})
-    for name, d in us.items():
-        if "error" not in d:
-            arrow = "▲" if d["change"] >= 0 else "▼"
-            lines.append(f"  {name}: {d['price']} {arrow}{abs(d['change_pct'])}%")
-    for name, d in asia.items():
-        if "error" not in d:
-            arrow = "▲" if d["change"] >= 0 else "▼"
-            lines.append(f"  {name}: {d['price']} {arrow}{abs(d['change_pct'])}%")
+    lines.append(_market_table(us, asia))
 
     # 系統性新聞原始清單
     articles = report.get("systemic_news_raw", [])
