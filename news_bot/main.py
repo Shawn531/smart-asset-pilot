@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 from fetchers.rss_fetcher import fetch_rss_news
 from fetchers.market_fetcher import fetch_market_data, format_market_summary
@@ -9,7 +9,8 @@ from config import DRY_RUN
 
 
 def run_daily_report():
-    today = datetime.now().strftime("%Y-%m-%d %H:%M")
+    TWZ = timezone(timedelta(hours=8))
+    today = datetime.now(TWZ).strftime("%Y-%m-%d %H:%M")
     mode_label = " [DRY RUN]" if DRY_RUN else ""
     print(f"\n{'='*50}")
     print(f"  Smart Asset Pilot 每日早報 — {today}{mode_label}")

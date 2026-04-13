@@ -22,17 +22,13 @@ def _fetch_taifex_tx() -> dict:
     quotes = r.json()["RtData"]["QuoteList"]
 
     # 只留單月合約（排除價差合約，SymbolID 不含 /）
-    # 且有成交量
-    candidates = [
-        q for q in quotes
-        if "/" not in q["SymbolID"]
-        and q["CLastPrice"] != "0.00"
-        and int(q["CTotalVolume"]) > 0
-    ]
-    if not candidates:
+    single = [q for q in quotes if "/" not in q["SymbolID"] and q["CLastPrice"] != "0.00"]
+    if not single:
         raise ValueError("TAIFEX: 無有效台指期報價")
 
-    # 取成交量最大的（近月）
+    # 優先取有成交量的（夜盤交易中）；無則取有收盤價的（休市後顯示收盤價）
+    active = [q for q in single if int(q["CTotalVolume"]) > 0]
+    candidates = active if active else single
     front = max(candidates, key=lambda q: int(q["CTotalVolume"]))
 
     price    = float(front["CLastPrice"])
