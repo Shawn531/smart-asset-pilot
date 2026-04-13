@@ -27,9 +27,13 @@ def _fetch_taifex_tx() -> dict:
         raise ValueError("TAIFEX: 無有效台指期報價")
 
     # 優先取有成交量的（夜盤交易中）；無則取有收盤價的（休市後顯示收盤價）
-    active = [q for q in single if int(q["CTotalVolume"]) > 0]
+    def _vol(q):
+        v = q.get("CTotalVolume", "0")
+        return int(v) if v.strip() else 0
+
+    active = [q for q in single if _vol(q) > 0]
     candidates = active if active else single
-    front = max(candidates, key=lambda q: int(q["CTotalVolume"]))
+    front = max(candidates, key=_vol)
 
     price    = float(front["CLastPrice"])
     ref      = float(front["CRefPrice"])

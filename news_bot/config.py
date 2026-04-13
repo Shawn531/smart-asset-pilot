@@ -78,4 +78,4 @@ MAX_SYSTEMIC_NEWS = 5
 MAX_STOCK_NEWS_PER_TICKER = 2
 
 # Dry run 模式：True = 跳過 AI 呼叫，只印出抓到的原始新聞清單（用於測試 fetcher）
-DRY_RUN = False
+DRY_RUN = True
