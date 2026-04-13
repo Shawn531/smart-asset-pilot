@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(git -C c:/Users/user/smart-asset-pilot log --oneline -10)",
-      "Bash(venv/Scripts/python -c \"from fetchers.market_fetcher import _fetch_taifex_tx; print\\(_fetch_taifex_tx\\(\\)\\)\")"
-    ]
-  }
-}

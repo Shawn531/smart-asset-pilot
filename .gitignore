@@ -1,4 +1,5 @@
 .env
+.claude/
 news_bot/venv/
 news_bot/output/
 __pycache__/
