@@ -2,9 +2,11 @@ name: Daily Market Report
 
 on:
   schedule:
-    # 台灣時間每個工作天 08:30 = UTC 00:30
-    - cron: '5 13 * * *'
+    # 台灣時間每天 08:30 = UTC 00:30
+    - cron: '30 0 * * *'
   workflow_dispatch:  # 允許手動觸發
+  repository_dispatch:  # 允許外部服務觸發（cron-job.org）
+    types: [cron-trigger]
 
 jobs:
   run-report:
