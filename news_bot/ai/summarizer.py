@@ -7,7 +7,7 @@ from config import GEMINI_API_KEY
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-001"]
 
 
 def _generate(contents, config) -> Optional[str]:
