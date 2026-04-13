@@ -10,30 +10,42 @@ _TAIFEX_HEADERS = {
 
 def _fetch_taifex_tx() -> dict:
     """
-    從 TAIFEX 取台指期近月合約報價（成交量最大的單月合約）
+    從 TAIFEX 取台指期近月合約報價
+    MarketType 0 = 日盤，1 = 夜盤；兩個都試，取成交量較大的
     """
-    r = requests.post(
-        "https://mis.taifex.com.tw/futures/api/getQuoteList",
-        json={"MarketType": "0", "CommodityID": "TX"},
-        headers=_TAIFEX_HEADERS,
-        timeout=10,
-    )
-    r.raise_for_status()
-    quotes = r.json()["RtData"]["QuoteList"]
-
-    # 只留單月合約（排除價差合約，SymbolID 不含 /）
-    single = [q for q in quotes if "/" not in q["SymbolID"] and q["CLastPrice"] != "0.00"]
-    if not single:
-        raise ValueError("TAIFEX: 無有效台指期報價")
-
-    # 優先取有成交量的（夜盤交易中）；無則取有收盤價的（休市後顯示收盤價）
     def _vol(q):
         v = q.get("CTotalVolume", "0")
         return int(v) if v.strip() else 0
 
+    all_quotes = []
+    for market_type in ("0", "1"):
+        try:
+            r = requests.post(
+                "https://mis.taifex.com.tw/futures/api/getQuoteList",
+                json={"MarketType": market_type, "CommodityID": "TX"},
+                headers=_TAIFEX_HEADERS,
+                timeout=10,
+            )
+            r.raise_for_status()
+            quotes = r.json()["RtData"]["QuoteList"]
+            all_quotes.extend(quotes)
+        except Exception:
+            pass
+
+    # 只留單月合約且有收盤價
+    single = [q for q in all_quotes if "/" not in q["SymbolID"] and q["CLastPrice"] != "0.00"]
+    if not single:
+        raise ValueError("TAIFEX: 無有效台指期報價")
+
+    def _time(q):
+        t = q.get("CTime", "0")
+        return int(t) if t.strip() else 0
+
+    # 優先取有成交量的；無則取有收盤價的
     active = [q for q in single if _vol(q) > 0]
     candidates = active if active else single
-    front = max(candidates, key=_vol)
+    # 取時間最新的（避免日盤大成交量蓋過夜盤即時報價）
+    front = max(candidates, key=_time)
 
     price    = float(front["CLastPrice"])
     ref      = float(front["CRefPrice"])
