@@ -67,6 +67,23 @@ def run_daily_report():
     systemic_result = summarize_systemic_news(rss_articles, market_summary)
     stock_result = summarize_stock_news(stock_articles)
 
+    from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+
+    # 全部模型失敗 → fallback 到 dry run
+    if systemic_result is None or stock_result is None:
+        print("\n[Gemini] 所有模型失敗，改發 Dry Run 報告")
+        report = {
+            "generated_at": today,
+            "dry_run": True,
+            "market_data": market_data,
+            "systemic_news_raw": rss_articles,
+            "stock_news_raw": stock_articles,
+        }
+        if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+            from notifiers.telegram_notifier import send_dry_run_report
+            send_dry_run_report(report)
+        return report
+
     # 組合最終報告
     report = {
         "generated_at": today,
@@ -91,7 +108,6 @@ def run_daily_report():
     print(f"\n報告已儲存至: {filename}")
 
     # 發送 Telegram 通知
-    from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
         from notifiers.telegram_notifier import send_report
         send_report(report)
