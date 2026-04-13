@@ -1,19 +1,20 @@
 import calendar
 import feedparser
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from config import RSS_FEEDS, MAX_ARTICLE_CHARS, MAX_SYSTEMIC_NEWS, MACRO_KEYWORDS
 
+TWZ = timezone(timedelta(hours=8))
+
 
 def _parse_pub_time(entry) -> Optional[datetime]:
-    """從 feedparser entry 取出發布時間（轉為本地時間）"""
-    for field in ("published_parsed", "updated_parsed"):
-        t = entry.get(field)
-        if t:
-            try:
-                return datetime.fromtimestamp(calendar.timegm(t))
-            except Exception:
-                pass
+    """從 feedparser entry 取出發布時間（只用 published，不用 updated）"""
+    t = entry.get("published_parsed")
+    if t:
+        try:
+            return datetime.fromtimestamp(calendar.timegm(t), tz=TWZ)
+        except Exception:
+            pass
     return None
 
 
@@ -39,11 +40,18 @@ def fetch_rss_news() -> list[dict]:
     只抓「昨天 08:30 至今」的新聞；不夠則自動往前擴（最多 72h）。
     按（關鍵字相關性 × 時效 + 跨媒體熱度）排序，取前 N 篇。
     """
-    now = datetime.now()
-    # 截止時間：平日 = 昨天 08:30；週一 = 上週五 08:30（跨越週末）
-    weekday = now.weekday()   # 0=週一 … 6=週日
-    days_back = 3 if weekday == 0 else 1
-    cutoff = (now - timedelta(days=days_back)).replace(hour=8, minute=30, second=0, microsecond=0)
+    now = datetime.now(TWZ)
+    today_830 = now.replace(hour=8, minute=30, second=0, microsecond=0)
+
+    if now > today_830 and now.weekday() < 5:
+        # 今天是工作日且已過 08:30 → 從今天 08:30 開始抓
+        cutoff = today_830
+    else:
+        # 還沒到 08:30、或剛好 08:30、或週末 → 往前找最近的工作日 08:30
+        check = now - timedelta(days=1)
+        while check.weekday() >= 5:   # 跳過週末
+            check -= timedelta(days=1)
+        cutoff = check.replace(hour=8, minute=30, second=0, microsecond=0)
 
     raw: list[dict] = []
     title_hits: dict[str, int] = {}   # 同標題出現在幾個 feed → 跨媒體熱度
@@ -109,14 +117,18 @@ def fetch_rss_news() -> list[dict]:
     else:
         filtered = all_articles   # 還是不夠就全取
 
-    window_label = cutoff.strftime("%m/%d %H:%M")
+    actual_cutoff = cutoff - timedelta(days=extra_days) if extra_days > 0 else cutoff
+    window_label = actual_cutoff.strftime("%m/%d %H:%M")
     if extra_days > 0:
-        window_label = f"{window_cutoff.strftime('%m/%d %H:%M')}（往前延 {extra_days} 天）"
+        window_label += f"（往前延 {extra_days} 天）"
     print(f"  找到 {len(filtered)} 篇新聞（{window_label} 後）")
 
-    # 清除內部欄位
+    # 清除內部欄位，保留格式化後的發布時間
     for a in filtered:
         a.pop("_score", None)
-        a.pop("_pub_time", None)
+        pub = a.pop("_pub_time", None)
+        if pub:
+            a["pub_time"] = pub.strftime("%m/%d %H:%M")
 
-    return filtered[:MAX_SYSTEMIC_NEWS]
+    news_window = f"{actual_cutoff.strftime('%m/%d %H:%M')} ～ {now.strftime('%m/%d %H:%M')} (台灣時間)"
+    return filtered[:MAX_SYSTEMIC_NEWS], news_window

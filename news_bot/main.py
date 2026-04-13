@@ -24,7 +24,7 @@ def run_daily_report():
 
     # 2. 抓 RSS 世界新聞
     print("\n[2/4] 抓取世界重大新聞...")
-    rss_articles = fetch_rss_news()
+    rss_articles, news_window = fetch_rss_news()
 
     # 3. 抓個股新聞
     print("\n[3/4] 抓取個股新聞...")
@@ -74,6 +74,7 @@ def run_daily_report():
         print("\n[Gemini] 所有模型失敗，改發 Dry Run 報告")
         report = {
             "generated_at": today,
+            "news_window": news_window,
             "dry_run": True,
             "market_data": market_data,
             "systemic_news_raw": rss_articles,
@@ -84,14 +85,19 @@ def run_daily_report():
             send_dry_run_report(report)
         return report
 
+    # 建立 url → pub_time 對照表（供 Telegram 顯示時間戳）
+    pub_time_map = {a["link"]: a["pub_time"] for a in rss_articles if a.get("link") and a.get("pub_time")}
+
     # 組合最終報告
     report = {
         "generated_at": today,
+        "news_window": news_window,
         "market_data": market_data,
         "market_sentiment": systemic_result.get("market_sentiment", {}),
         "market_overview": systemic_result.get("market_overview", ""),
         "systemic_events": systemic_result.get("systemic_events", []),
         "individual_stocks": stock_result,
+        "pub_time_map": pub_time_map,
     }
 
     # 輸出報告

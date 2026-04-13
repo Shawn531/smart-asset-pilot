@@ -8,6 +8,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # Telegram 通知
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_EXTRA_IDS = ["8625444736"]  # 額外接收早報的帳號
 
 # 個股關注清單（未來將與資產管理模組連動）
 WATCHLIST = [
@@ -78,4 +79,4 @@ MAX_SYSTEMIC_NEWS = 5
 MAX_STOCK_NEWS_PER_TICKER = 2
 
 # Dry run 模式：True = 跳過 AI 呼叫，只印出抓到的原始新聞清單（用於測試 fetcher）
-DRY_RUN = False
+DRY_RUN = True

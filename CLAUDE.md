@@ -5,15 +5,15 @@
 
 ## 部署狀態
 - **GitHub repo**: https://github.com/Shawn531/smart-asset-pilot（私人）
-- **自動排程**: GitHub Actions cron `30 0 * * *`（每天 UTC 00:30 = 台灣 08:30）
-- **外部觸發**: cron-job.org 每天 08:30 台灣時間打 GitHub repository_dispatch API，確保準時觸發
-- **Telegram**: 報告自動發送到個人帳號
+- **自動排程**: cron-job.org 每天 08:30 台灣時間打 GitHub repository_dispatch API
+- **GitHub Actions**: 收到 dispatch 後執行，也支援手動 Run workflow
+- **Telegram**: 報告自動發送到多個帳號
 
 ## 專案結構
 ```
 smart-asset-pilot/
 ├── .github/workflows/
-│   └── daily_report.yml     # GitHub Actions 排程 + repository_dispatch trigger
+│   └── daily_report.yml     # GitHub Actions（repository_dispatch + workflow_dispatch）
 ├── run_report.bat            # 本地手動執行用（Windows）
 └── news_bot/
     ├── main.py              # 主程式（含 Gemini 全失敗時 fallback 到 dry run）
@@ -21,13 +21,13 @@ smart-asset-pilot/
     ├── requirements.txt     # Python 依賴
     ├── .env                 # API keys（不進 git）
     ├── fetchers/
-    │   ├── rss_fetcher.py   # RSS 新聞（時間過濾、關鍵字評分、熱度排序）
+    │   ├── rss_fetcher.py   # RSS 新聞（台灣時區、時間窗口、關鍵字評分、熱度排序）
     │   ├── market_fetcher.py # 大盤數據（yfinance + TAIFEX API 台指夜盤）
     │   └── stock_fetcher.py  # 個股新聞（yfinance）
     ├── ai/
     │   └── summarizer.py    # Gemini AI 摘要（多模型 fallback）
     └── notifiers/
-        └── telegram_notifier.py  # Telegram 發送（表格排版、情緒指標）
+        └── telegram_notifier.py  # Telegram 發送（表格排版、情緒指標、多人接收）
 ```
 
 ## 技術棧
@@ -60,6 +60,12 @@ TICKER_NAMES = {
 - 美股：S&P 500、Nasdaq、Dow Jones、VIX、BRENT（BZ=F）
 - 亞股：日經 225、韓國 KOSPI、台指夜盤（TAIFEX API）
 
+### TELEGRAM_EXTRA_IDS
+額外接收早報的 Telegram 帳號清單（直接加 ID 字串即可）：
+```python
+TELEGRAM_EXTRA_IDS = ["8625444736"]
+```
+
 ### DRY_RUN
 - `True` = 跳過 AI，只發送原始新聞清單（測試用）
 - `False` = 完整 Gemini 分析 + Telegram 報告（正式使用）
@@ -75,14 +81,21 @@ TICKER_NAMES = {
 ## TAIFEX 台指夜盤
 - API: `POST https://mis.taifex.com.tw/futures/api/getQuoteList`
 - 同時抓 MarketType `0`（日盤）和 `1`（夜盤）
-- 取時間最新的合約（非成交量最大），確保夜盤開市時抓到即時報價
+- 取時間戳最新的合約，確保夜盤開市時抓到即時報價
 - 夜盤未開時顯示日盤收盤價
+
+## 新聞時間窗口邏輯
+- 基準時間：台灣時間工作日 08:30
+- 今天工作日且已過 08:30 → 今天 08:30 到現在
+- 尚未到 08:30 或週末 → 上一個工作日 08:30 到現在
+- 週一 08:30 → 上週五 08:30 到現在
+- 每篇新聞旁邊顯示發布時間戳
 
 ## Telegram 報告格式
 1. 市場情緒指標（-10 到 +10 進度條）
 2. 大盤數據（對齊表格，漲跌幅 🔴/🟢）
 3. 大盤總結（Gemini 一段話）
-4. 今日重大事件（系統性新聞，附來源連結）
+4. 今日重大事件（標題 + 發布時間 + 來源連結）
 5. 個股動態（顯示公司名稱，附來源連結）
 
 顏色慣例：🔴 偏多（漲）、🟢 偏空（跌）— 台灣市場慣例

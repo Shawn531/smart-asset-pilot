@@ -1,22 +1,23 @@
 import requests
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TICKER_NAMES
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_EXTRA_IDS, TICKER_NAMES
 
 API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
 
 def _send(text: str):
-    """送出一則 Telegram 訊息（HTML 格式，超過 4096 字自動切分）"""
-    # Telegram 單則訊息上限 4096 字元
+    """送出一則 Telegram 訊息給所有接收者（HTML 格式，超過 4096 字自動切分）"""
+    all_ids = [TELEGRAM_CHAT_ID] + TELEGRAM_EXTRA_IDS
     chunks = [text[i:i+4000] for i in range(0, len(text), 4000)]
-    for chunk in chunks:
-        resp = requests.post(API_URL, json={
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": chunk,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": True,
-        })
-        if not resp.ok:
-            print(f"[Telegram] 發送失敗: {resp.text}")
+    for chat_id in all_ids:
+        for chunk in chunks:
+            resp = requests.post(API_URL, json={
+                "chat_id": chat_id,
+                "text": chunk,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+            })
+            if not resp.ok:
+                print(f"[Telegram] 發送失敗 ({chat_id}): {resp.text}")
 
 
 def _market_table(us: dict, asia: dict) -> str:
@@ -70,6 +71,8 @@ def send_report(report: dict):
     # ── 標題 ──
     lines.append(f"<b>📊 Smart Asset Pilot 每日早報</b>")
     lines.append(f"<i>{report['generated_at']}</i>")
+    if report.get("news_window"):
+        lines.append(f"<i>📰 新聞時間窗：{report['news_window']}</i>")
 
     # ── 市場情緒指標 ──
     sentiment = report.get("market_sentiment", {})
@@ -98,13 +101,16 @@ def send_report(report: dict):
 
     # ── 系統性事件 ──
     events = report.get("systemic_events", [])
+    pub_time_map = report.get("pub_time_map", {})
     if events:
         lines.append("")
         lines.append("<b>【今日重大事件】</b>")
         for i, e in enumerate(events, 1):
             emoji = _sentiment_emoji(e.get("sentiment", ""))
             label = e.get("sentiment", "中性")
-            lines.append(f"\n{i}. <b>{e['title']}</b>  {emoji} {label}")
+            pub = pub_time_map.get(e.get("source_url", ""), "")
+            time_tag = f"  <i>{pub}</i>" if pub else ""
+            lines.append(f"\n{i}. <b>{e['title']}</b>  {emoji} {label}{time_tag}")
             for pt in e.get("key_points", []):
                 lines.append(f"  • {pt}")
             url = e.get("source_url", "")
@@ -152,7 +158,8 @@ def send_dry_run_report(report: dict):
         lines.append("")
         lines.append("<b>【今日系統性新聞（原始）】</b>")
         for i, a in enumerate(articles, 1):
-            lines.append(f"\n{i}. <b>{a['title']}</b>")
+            pub = f"  <i>{a['pub_time']}</i>" if a.get("pub_time") else ""
+            lines.append(f"\n{i}. <b>{a['title']}</b>{pub}")
             lines.append(f"  來源: {a['source']}")
             if a.get("link"):
                 lines.append(f"  🔗 <a href=\"{a['link']}\">原文連結</a>")
