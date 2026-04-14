@@ -6,3 +6,5 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
+portfolio_app/.streamlit/secrets.toml
+portfolio_app/venv/
