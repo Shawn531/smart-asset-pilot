@@ -133,7 +133,7 @@ stock_term: dict[str, str] = {}
 cols = st.columns(3)
 for i, name in enumerate(all_stocks):
     is_daytrade = df[df["股名"] == name]["is_daytrade"].all()
-    default = "短期" if is_daytrade else "中期"
+    default = "短期" if is_daytrade else "長期"
     with cols[i % 3]:
         label = st.selectbox(
             name,
@@ -184,7 +184,7 @@ if not st.session_state.import_done:
                 add_trade(
                     ticker=row["ticker"],
                     action=row["action"],
-                    term=stock_term.get(row["股名"], "mid"),
+                    term=stock_term.get(row["股名"], "long"),
                     trade_date=row["日期_dt"],
                     shares=row["股數"],
                     price=row["成交價_num"],
