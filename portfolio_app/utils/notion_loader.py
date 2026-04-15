@@ -110,9 +110,50 @@ def add_trade(
 
 
 def delete_trade(page_id: str) -> None:
-    """將 Notion 頁面封存（邏輯刪除）"""
+    """將 Notion 頁面封存（邏輯刪除）。已封存的頁面直接略過。"""
     client = _get_client()
-    client.pages.update(page_id=page_id, archived=True)
+    try:
+        client.pages.update(page_id=page_id, archived=True)
+    except Exception as e:
+        if "archived" in str(e).lower():
+            return  # 已刪除，忽略
+        raise
+
+
+def update_trade(
+    page_id: str,
+    ticker: str,
+    action: str,
+    term: str,
+    trade_date,
+    shares: float,
+    price: float,
+    fee: float,
+    reason: str,
+    note: str = "",
+) -> None:
+    """更新一筆交易紀錄的所有欄位"""
+    client = _get_client()
+    action_names = {
+        "buy": "買入", "sell": "賣出",
+        "deposit": "入金", "withdraw": "出金",
+    }
+    name = f"{action_names.get(action, action)} {ticker}"
+    client.pages.update(
+        page_id=page_id,
+        properties={
+            "Name": {"title": [{"text": {"content": name}}]},
+            "date": {"date": {"start": str(trade_date)}},
+            "ticker": {"select": {"name": ticker}},
+            "action": {"select": {"name": action}},
+            "term": {"select": {"name": term}},
+            "shares": {"number": shares},
+            "price": {"number": price},
+            "fee": {"number": fee},
+            "reason": {"rich_text": [{"text": {"content": reason}}]},
+            "note": {"rich_text": [{"text": {"content": note}}]},
+        },
+    )
 
 
 # ── 欄位取值輔助函數 ─────────────────────────────────────────────────────────

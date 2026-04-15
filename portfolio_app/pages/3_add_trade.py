@@ -64,7 +64,33 @@ if record_type == "📈 股票交易":
         )
         shares = st.number_input("股數", min_value=0.0, step=1.0, format="%.0f", key="shares")
         price = st.number_input("成交均價（元）", min_value=0.0, step=0.01, format="%.2f", key="price")
-        fee = st.number_input("手續費（元）", min_value=0.0, value=0.0, step=1.0, format="%.0f", key="fee")
+
+        # 自動計算手續費（台灣標準：0.1425% × 折扣，最低 $20；賣出加證交稅 0.3%）
+        _action_type = "sell" if "sell" in action_label else "buy"
+        _discount = float(st.secrets.get("FEE_DISCOUNT", 0.6))
+        if shares > 0 and price > 0:
+            _amount = shares * price
+            _brokerage = max(20.0, round(_amount * 0.001425 * _discount))
+            if _action_type == "sell":
+                _tx_tax = round(_amount * 0.003)
+                _computed_fee = _brokerage + _tx_tax
+                _fee_hint = f"建議：手續費 ${_brokerage:,.0f} ＋ 證交稅 ${_tx_tax:,.0f} ＝ ${_computed_fee:,.0f}"
+            else:
+                _computed_fee = _brokerage
+                _fee_hint = f"建議：${_computed_fee:,.0f}（0.1425% × {_discount:.0%}，最低 $20）"
+        else:
+            _computed_fee = 0.0
+            _fee_hint = ""
+
+        fee = st.number_input(
+            "手續費（含券商費＋證交稅，自動估算可覆寫）",
+            min_value=0.0,
+            value=float(_computed_fee),
+            step=1.0, format="%.0f",
+            key="fee",
+        )
+        if _fee_hint:
+            st.caption(_fee_hint)
 
     reason = st.text_area(
         "買入/賣出理由 *（必填）",

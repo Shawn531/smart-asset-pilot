@@ -10,8 +10,11 @@ import pandas as pd
 from datetime import date
 
 from utils.notion_loader import fetch_trades
-from utils.price_fetcher import get_multi_history
-from utils.pnl_calculator import compute_accumulation_history
+from utils.price_fetcher import get_multi_history, get_current_prices
+from utils.pnl_calculator import (
+    compute_accumulation_history, compute_positions,
+    compute_summary, compute_cash, compute_all_realized_pnl,
+)
 
 st.set_page_config(page_title="資產累積", page_icon="📉", layout="wide")
 
@@ -20,28 +23,57 @@ st.caption("每日持倉市值的歷史堆疊圖，追蹤長期財富成長曲�
 
 # ── 載入資料 ──────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=3600)
-def load_accumulation():
+def load_history():
+    """歷史堆疊圖用：OHLC 歷史資料"""
     trades = fetch_trades()
     if not trades:
         return pd.DataFrame(), []
-
-    tickers = list(set(t["ticker"] for t in trades if t["ticker"]))
+    stock_tickers = list(set(
+        t["ticker"] for t in trades
+        if t["ticker"] and t["ticker"] != "CASH" and t["action"] in ("buy", "sell")
+    ))
     start = min(t["date"] for t in trades if t["date"])
-
-    price_histories = get_multi_history(tickers, start=start)
-    cash = float(st.secrets.get("CASH_BALANCE", 0))
-    df = compute_accumulation_history(trades, price_histories, cash_balance=cash)
+    price_histories = get_multi_history(stock_tickers, start=start)
+    df = compute_accumulation_history(trades, price_histories)
     return df, trades
+
+
+@st.cache_data(ttl=300)
+def load_current():
+    """摘要 metrics 用：即時報價（與 app.py 相同來源）"""
+    trades = fetch_trades()
+    if not trades:
+        return {}, 0.0
+    positions = compute_positions(trades)
+    prices = get_current_prices(list(positions.keys())) if positions else {}
+    summary = compute_summary(positions, prices)
+    summary["total_realized_pnl"] = compute_all_realized_pnl(trades)
+    cash = compute_cash(trades)
+    return summary, cash
+
 
 with st.spinner("計算歷史資產累積（首次載入需要較長時間）..."):
     try:
-        acc_df, trades = load_accumulation()
+        acc_df, trades = load_history()
+        summary, cash_now = load_current()
     except Exception as e:
         st.error(f"計算失敗：{e}")
         st.stop()
 
 if acc_df.empty:
     st.info("尚無交易紀錄，請先新增交易。")
+    st.stop()
+
+# ── 時間範圍選擇 ──────────────────────────────────────────────────────────────
+time_opts = {"全部": None, "近1年": 365, "近6個月": 180, "近3個月": 90, "近1個月": 30}
+time_label = st.radio("時間範圍", list(time_opts.keys()), horizontal=True, index=0)
+if time_opts[time_label] is not None:
+    from datetime import date, timedelta
+    cutoff = date.today() - timedelta(days=time_opts[time_label])
+    acc_df = acc_df[acc_df.index >= cutoff]
+
+if acc_df.empty:
+    st.info("該時間範圍內無資料")
     st.stop()
 
 # ── 側邊欄：視角切換 ──────────────────────────────────────────────────────────
@@ -140,15 +172,15 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # ── 摘要數字 ──────────────────────────────────────────────────────────────────
-if not acc_df.empty:
-    latest = acc_df.iloc[-1]
-    earliest = acc_df.iloc[0]
-    total_growth = latest["total"] - earliest["total"]
-    total_growth_pct = (total_growth / earliest["total"] * 100) if earliest["total"] > 0 else 0.0
+if not acc_df.empty and summary:
+    total_assets_now = summary["total_market_value"] + cash_now
+    earliest_total = acc_df["total"].dropna().iloc[0] if not acc_df["total"].dropna().empty else 0.0
+    total_growth = total_assets_now - earliest_total
+    total_growth_pct = (total_growth / earliest_total * 100) if earliest_total > 0 else 0.0
 
     st.divider()
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("目前總資產", f"${latest['total']:,.0f}")
+    c1.metric("目前總資產", f"${total_assets_now:,.0f}")
     c2.metric("期間成長", f"${total_growth:,.0f}", delta=f"{total_growth_pct:+.1f}%")
-    c3.metric("累積已實現損益", f"${latest['realized_pnl']:,.0f}")
-    c4.metric("追蹤天數", f"{len(acc_df)} 個交易日")
+    c3.metric("累積已實現損益", f"${summary['total_realized_pnl']:,.0f}")
+    c4.metric("追蹤天數", f"{len(acc_df.dropna(subset=['total']))} 個交易日")
