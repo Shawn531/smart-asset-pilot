@@ -106,9 +106,41 @@ r2c3.metric("已實現損益（含平倉）", f"${realized:,.0f}",
 
 st.divider()
 
+# ── 觀察清單資料（Tab 用）────────────────────────────────────────────────────
+_default_watch = ["2330.TW", "2308.TW", "0050.TW", "00878.TW", "NVDA"]
+try:
+    _fixed_watch = list(st.secrets.get("WATCHLIST", _default_watch))
+except Exception:
+    _fixed_watch = _default_watch
+
+if "watchlist_extra" not in st.session_state:
+    st.session_state.watchlist_extra = []
+
+
+@st.cache_data(ttl=120)
+def load_watchlist(tickers: tuple) -> list[dict]:
+    results = []
+    for tk in tickers:
+        try:
+            info = yf.Ticker(tk).fast_info
+            p = info.last_price
+            prev = info.previous_close
+            if p is None or prev is None:
+                raise ValueError
+            chg = p - prev
+            pct = chg / prev * 100
+            results.append({
+                "ticker": tk, "price": float(p),
+                "change": float(chg), "pct": float(pct), "ok": True,
+            })
+        except Exception:
+            results.append({"ticker": tk, "ok": False})
+    return results
+
+
 # ── 持倉 Tab ─────────────────────────────────────────────────────────────────
-tabs = st.tabs(["📈 長期", "📊 中期", "⚡ 短期"])
-for tab, term_key in zip(tabs, ["long", "mid", "short"]):
+tab_long, tab_mid, tab_short, tab_watch = st.tabs(["📈 長期", "📊 中期", "⚡ 短期", "👁️ 觀察清單"])
+for tab, term_key in zip([tab_long, tab_mid, tab_short], ["long", "mid", "short"]):
     with tab:
         term_label = TERM_LABELS[term_key]
         term_pos = {t: d for t, d in summary["by_ticker"].items() if d["term"] == term_key}
@@ -345,98 +377,59 @@ with chart_col2:
     st.plotly_chart(_make_bar(labels, vals, suffix),
                     use_container_width=True, config={"displayModeBar": False})
 
+with tab_watch:
+    all_watch = _fixed_watch + st.session_state.watchlist_extra
+
+    wa_col, wb_col = st.columns([5, 1])
+    with wa_col:
+        new_watch = st.text_input(
+            "新增代號", placeholder="例：2454.TW 或 AAPL",
+            label_visibility="collapsed", key="watch_input_home",
+        ).strip().upper()
+    with wb_col:
+        if st.button("新增", key="watch_add_home", use_container_width=True):
+            if new_watch and new_watch not in all_watch:
+                st.session_state.watchlist_extra.append(new_watch)
+                st.rerun()
+
+    with st.spinner("載入觀察清單報價..."):
+        watch_data = load_watchlist(tuple(all_watch))
+
+    for i in range(0, len(watch_data), 2):
+        wcols = st.columns(2)
+        for j, d in enumerate(watch_data[i: i + 2]):
+            tk = d["ticker"]
+            nm = get_name(tk)
+            header = (
+                f"{nm} <span style='color:#888;font-size:0.82em'>({tk})</span>"
+                if nm != tk else tk
+            )
+            with wcols[j]:
+                if not d["ok"]:
+                    st.markdown(
+                        f"<div style='background:#1C1C2E;border-radius:12px;padding:16px 18px;margin-bottom:4px;'>"
+                        f"<div style='font-size:1.05em;font-weight:700;margin-bottom:6px;'>{header}</div>"
+                        f"<div style='color:#666'>無法取得報價</div></div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    c = COLOR_UP if d["change"] > 0 else (COLOR_DOWN if d["change"] < 0 else COLOR_NEUTRAL)
+                    arrow = pnl_arrow(d["change"])
+                    sign = "+" if d["change"] >= 0 else ""
+                    st.markdown(
+                        f"<div style='background:#1C1C2E;border-radius:12px;padding:16px 18px;margin-bottom:4px;'>"
+                        f"<div style='font-size:1.05em;font-weight:700;margin-bottom:6px;'>{header}</div>"
+                        f"<div style='font-size:1.4em;font-weight:600;margin-bottom:4px;'>${d['price']:,.2f}</div>"
+                        f"<div style='font-size:1em;color:{c};'>"
+                        f"{arrow} {sign}{d['change']:,.2f}　({sign}{d['pct']:.2f}%)</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                if st.button("📈 走勢圖", key=f"watch_chart_{tk}", use_container_width=True):
+                    st.session_state["chart_ticker"] = tk
+                    st.switch_page("pages/1_charts.py")
+
 st.divider()
 st.caption(
     "資料每 5 分鐘自動快取。⚠️ 成本均價含手續費，與券商 APP 顯示的「不含費用均價」可能略有差異。"
 )
-
-# ── 觀察清單 ──────────────────────────────────────────────────────────────────
-st.divider()
-
-_default_watch = ["2330.TW", "2308.TW", "0050.TW", "00878.TW", "NVDA"]
-try:
-    _fixed_watch = list(st.secrets.get("WATCHLIST", _default_watch))
-except Exception:
-    _fixed_watch = _default_watch
-
-if "watchlist_extra" not in st.session_state:
-    st.session_state.watchlist_extra = []
-
-wh_col, wa_col, wb_col = st.columns([3, 3, 1])
-with wh_col:
-    st.subheader("👁️ 觀察清單")
-with wa_col:
-    new_watch = st.text_input(
-        "新增代號", placeholder="例：2454.TW 或 AAPL",
-        label_visibility="collapsed", key="watch_input_home",
-    ).strip().upper()
-with wb_col:
-    if st.button("新增", key="watch_add_home", use_container_width=True):
-        all_existing = _fixed_watch + st.session_state.watchlist_extra
-        if new_watch and new_watch not in all_existing:
-            st.session_state.watchlist_extra.append(new_watch)
-            st.rerun()
-
-all_watch = _fixed_watch + st.session_state.watchlist_extra
-
-
-@st.cache_data(ttl=120)
-def load_watchlist(tickers: tuple) -> list[dict]:
-    results = []
-    for tk in tickers:
-        try:
-            info = yf.Ticker(tk).fast_info
-            p = info.last_price
-            prev = info.previous_close
-            if p is None or prev is None:
-                raise ValueError
-            chg = p - prev
-            pct = chg / prev * 100
-            results.append({
-                "ticker": tk,
-                "price": float(p),
-                "change": float(chg),
-                "pct": float(pct),
-                "ok": True,
-            })
-        except Exception:
-            results.append({"ticker": tk, "ok": False})
-    return results
-
-
-with st.spinner("載入觀察清單報價..."):
-    watch_data = load_watchlist(tuple(all_watch))
-
-for i in range(0, len(watch_data), 2):
-    wcols = st.columns(2)
-    for j, d in enumerate(watch_data[i: i + 2]):
-        tk = d["ticker"]
-        nm = get_name(tk)
-        header = (
-            f"{nm} <span style='color:#888;font-size:0.82em'>({tk})</span>"
-            if nm != tk else tk
-        )
-        with wcols[j]:
-            if not d["ok"]:
-                st.markdown(
-                    f"<div style='background:#1C1C2E;border-radius:12px;padding:16px 18px;margin-bottom:4px;'>"
-                    f"<div style='font-size:1.05em;font-weight:700;margin-bottom:6px;'>{header}</div>"
-                    f"<div style='color:#666'>無法取得報價</div></div>",
-                    unsafe_allow_html=True,
-                )
-            else:
-                c = COLOR_UP if d["change"] > 0 else (COLOR_DOWN if d["change"] < 0 else COLOR_NEUTRAL)
-                arrow = pnl_arrow(d["change"])
-                sign = "+" if d["change"] >= 0 else ""
-                st.markdown(
-                    f"<div style='background:#1C1C2E;border-radius:12px;padding:16px 18px;margin-bottom:4px;'>"
-                    f"<div style='font-size:1.05em;font-weight:700;margin-bottom:6px;'>{header}</div>"
-                    f"<div style='font-size:1.4em;font-weight:600;margin-bottom:4px;'>${d['price']:,.2f}</div>"
-                    f"<div style='font-size:1em;color:{c};'>"
-                    f"{arrow} {sign}{d['change']:,.2f}　({sign}{d['pct']:.2f}%)</div>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
-            if st.button("📈 走勢圖", key=f"watch_chart_{tk}", use_container_width=True):
-                st.session_state["chart_ticker"] = tk
-                st.switch_page("pages/1_charts.py")
