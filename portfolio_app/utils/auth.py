@@ -14,7 +14,17 @@ def require_login() -> str:
     確認登入狀態。未登入則顯示登入表單並停止執行。
     已登入則在側邊欄頂端顯示用戶名 + 登出按鈕。
     回傳目前使用者名稱。
+
+    若 secrets 中設定了 AUTO_LOGIN_USER，則跳過登入直接以該用戶身份執行。
+    適用於「單人專屬部署」的 Streamlit Cloud 情境。
     """
+    # 單人部署：secrets 設定 AUTO_LOGIN_USER 時自動登入
+    auto_user = st.secrets.get("AUTO_LOGIN_USER", "")
+    if auto_user:
+        st.session_state["auth_user"] = auto_user
+        _show_sidebar_user(show_logout=False)
+        return auto_user
+
     if not st.session_state.get("auth_user"):
         _show_login_form()
         st.stop()
@@ -41,16 +51,17 @@ def _show_login_form() -> None:
                 st.error("帳號或密碼錯誤")
 
 
-def _show_sidebar_user() -> None:
-    """在側邊欄最頂端固定顯示用戶名 + 登出按鈕"""
+def _show_sidebar_user(show_logout: bool = True) -> None:
+    """在側邊欄最頂端固定顯示用戶名（+ 登出按鈕，AUTO_LOGIN_USER 模式下隱藏）"""
     with st.sidebar:
         user = st.session_state.get("auth_user", "")
         st.markdown(
             f"<div style='padding:6px 0 2px 0;font-size:0.9em;color:#AAA;'>👤 {user}</div>",
             unsafe_allow_html=True,
         )
-        if st.button("登出", key="_logout_btn", use_container_width=True):
-            st.session_state.pop("auth_user", None)
-            st.cache_data.clear()
-            st.rerun()
+        if show_logout:
+            if st.button("登出", key="_logout_btn", use_container_width=True):
+                st.session_state.pop("auth_user", None)
+                st.cache_data.clear()
+                st.rerun()
         st.divider()
