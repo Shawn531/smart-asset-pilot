@@ -145,7 +145,7 @@ GitHub → Actions → Daily Market Report → Run workflow
 - [x] 圓餅圖自訂 HTML 圖例（依期別分組，含現金）
 - [x] 短期顏色改為琥珀/橘色（避免與台灣市場紅漲慣例混淆）
 - [x] 未實現損益 % ｜ 未實現損益 $ ｜ 已實現損益 % ｜ 已實現損益 $，切換後只顯示對應的一張圖，各自按自己的指標排序。如果還沒有已實現損益，按鈕選項只會出現前兩個。
-- [ ] Charts 整合進小卡：每張持倉卡片底部加「📈 走勢圖」按鈕，點擊直接跳轉並自動選好該股票 -> 改為不用跳轉到charts 可以跳出視窗
+- [x] Charts 整合進小卡：每張持倉卡片底部加「📈 走勢圖」按鈕，點擊直接跳轉並自動選好該股票
 
 ### 走勢圖（1_charts.py）
 - [x] K 線蠟燭圖 + 成交量子圖
@@ -179,11 +179,11 @@ GitHub → Actions → Daily Market Report → Run workflow
 ### 效能 / 其他
 - [ ] Loading 優化：Notion 暫存計算結果（除非按「重新整理資料」否則讀快取，不重新計算）
 - [ ] 放空部位支援（目前 FIFO 僅支援先買後賣）
-- [ ] 觀察清單固定清單存入 Notion（目前在 `secrets.toml` 設定）
+- [x] 觀察清單固定清單存入 Notion（action="watch" 存同一交易 DB，每位用戶獨立，支援新增/移除）
 - [ ] `ticker_names.py` 中文名稱對應表擴充（目前需手動維護）
 
 
 ### USER
 - [x] 加入使用者（獨立 Notion DB per user，secrets.toml 管帳密）
-- [ ] 使用者可以不用頻繁重新登入 ⏸ cookie 方案干擾 data rendering，待改用其他方式
-- [x] 登出要always出現在BAR（側邊欄頂端固定顯示用戶名 + 登出按鈕）
+- [ ] 使用者可以不用頻繁重新登入 
+- [ ] 登出要always出現在BAR

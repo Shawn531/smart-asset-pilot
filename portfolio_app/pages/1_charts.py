@@ -12,7 +12,7 @@ import pandas as pd
 import yfinance as yf
 from datetime import date, timedelta
 
-from utils.notion_loader import fetch_trades
+from utils.notion_loader import fetch_trades, fetch_watchlist, add_to_watchlist, delete_trade
 from utils.price_fetcher import get_history
 from utils.pnl_calculator import compute_positions
 from utils.ticker_names import get_name, TICKER_TO_NAME
@@ -232,80 +232,99 @@ with tab_chart:
 with tab_watch:
     st.subheader("觀察清單")
 
-    default_watchlist = ["2330.TW", "2308.TW", "0050.TW", "00878.TW", "NVDA"]
-    try:
-        watchlist = list(st.secrets.get("WATCHLIST", default_watchlist))
-    except Exception:
-        watchlist = default_watchlist
+    @st.cache_data(ttl=60)
+    def _load_watch_items(user: str) -> list[dict]:
+        return fetch_watchlist(user)
 
-    if "watchlist_extra" not in st.session_state:
-        st.session_state.watchlist_extra = []
+    watch_items = _load_watch_items(current_user)
+    watch_tickers = [item["ticker"] for item in watch_items if item["ticker"]]
+    ticker_to_page_charts = {item["ticker"]: item["page_id"] for item in watch_items}
 
     add_col, btn_col = st.columns([4, 1])
     with add_col:
         new_ticker = st.text_input(
-            "新增代號（本次有效）", placeholder="例：2454.TW 或 AAPL",
+            "新增代號", placeholder="例：2454.TW 或 AAPL",
             label_visibility="collapsed", key="watch_input",
         ).strip().upper()
     with btn_col:
         if st.button("新增", key="watch_add", use_container_width=True):
-            if new_ticker and new_ticker not in watchlist and new_ticker not in st.session_state.watchlist_extra:
-                st.session_state.watchlist_extra.append(new_ticker)
-                st.rerun()
+            if not new_ticker:
+                st.warning("請輸入代號")
+            elif new_ticker in watch_tickers:
+                st.warning(f"{new_ticker} 已在清單中")
+            else:
+                with st.spinner("新增中..."):
+                    try:
+                        add_to_watchlist(new_ticker, current_user)
+                        st.cache_data.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"新增失敗：{e}")
 
-    all_watch = watchlist + st.session_state.watchlist_extra
+    if not watch_tickers:
+        st.info("觀察清單為空，請輸入股票代號新增。")
+    else:
+        @st.cache_data(ttl=120)
+        def fetch_watch(tickers: tuple) -> list[dict]:
+            results = []
+            for tk in tickers:
+                try:
+                    info = yf.Ticker(tk).fast_info
+                    p = info.last_price
+                    prev = info.previous_close
+                    if p is None or prev is None:
+                        raise ValueError
+                    chg = p - prev
+                    pct = chg / prev * 100
+                    results.append({"ticker": tk, "price": float(p), "change": float(chg), "pct": float(pct), "ok": True})
+                except Exception:
+                    results.append({"ticker": tk, "ok": False})
+            return results
 
-    @st.cache_data(ttl=120)
-    def fetch_watch(tickers: tuple) -> list[dict]:
-        results = []
-        for tk in tickers:
-            try:
-                info = yf.Ticker(tk).fast_info
-                p = info.last_price
-                prev = info.previous_close
-                if p is None or prev is None:
-                    raise ValueError
-                chg = p - prev
-                pct = chg / prev * 100
-                results.append({"ticker": tk, "price": float(p), "change": float(chg), "pct": float(pct), "ok": True})
-            except Exception:
-                results.append({"ticker": tk, "ok": False})
-        return results
+        if st.button("🔄 重新整理觀察清單", key="watch_refresh"):
+            st.cache_data.clear()
+            st.rerun()
 
-    if st.button("🔄 重新整理觀察清單", key="watch_refresh"):
-        st.cache_data.clear()
-        st.rerun()
+        with st.spinner("載入報價..."):
+            watch_data = fetch_watch(tuple(watch_tickers))
 
-    with st.spinner("載入報價..."):
-        watch_data = fetch_watch(tuple(all_watch))
+        cols_n = 3
+        for i in range(0, len(watch_data), cols_n):
+            wcols = st.columns(cols_n)
+            for j, d in enumerate(watch_data[i: i + cols_n]):
+                tk = d["ticker"]
+                nm = get_name(tk)
+                with wcols[j]:
+                    if not d["ok"]:
+                        st.markdown(
+                            f"<div style='background:#1C1C2E;border-radius:10px;padding:12px 14px;margin-bottom:4px'>"
+                            f"<b>{nm}</b><br><span style='color:#888;font-size:0.82em'>{tk}</span>"
+                            f"<br><span style='color:#666'>無法取得報價</span></div>",
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        c = "#E05C5C" if d["change"] > 0 else ("#4CAF82" if d["change"] < 0 else "#AAAAAA")
+                        arrow = "▲" if d["change"] > 0 else ("▼" if d["change"] < 0 else "─")
+                        sign = "+" if d["change"] >= 0 else ""
+                        nm_line = f"<b>{nm}</b>" if nm != tk else f"<b>{tk}</b>"
+                        tk_line = f"<span style='color:#888;font-size:0.82em'>{tk}</span>" if nm != tk else ""
+                        st.markdown(
+                            f"<div style='background:#1C1C2E;border-radius:10px;padding:12px 14px;margin-bottom:4px'>"
+                            f"{nm_line}<br>{tk_line}"
+                            f"<div style='font-size:1.4em;font-weight:700;margin-top:4px'>${d['price']:,.2f}</div>"
+                            f"<div style='color:{c}'>{arrow} {sign}{d['change']:,.2f}　({sign}{d['pct']:.2f}%)</div>"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
 
-    cols_n = 3
-    for i in range(0, len(watch_data), cols_n):
-        wcols = st.columns(cols_n)
-        for j, d in enumerate(watch_data[i: i + cols_n]):
-            tk = d["ticker"]
-            nm = get_name(tk)
-            with wcols[j]:
-                if not d["ok"]:
-                    st.markdown(
-                        f"<div style='background:#1C1C2E;border-radius:10px;padding:12px 14px;margin-bottom:8px'>"
-                        f"<b>{nm}</b><br><span style='color:#888;font-size:0.82em'>{tk}</span>"
-                        f"<br><span style='color:#666'>無法取得報價</span></div>",
-                        unsafe_allow_html=True,
-                    )
-                    continue
-                c = "#E05C5C" if d["change"] > 0 else ("#4CAF82" if d["change"] < 0 else "#AAAAAA")
-                arrow = "▲" if d["change"] > 0 else ("▼" if d["change"] < 0 else "─")
-                sign = "+" if d["change"] >= 0 else ""
-                nm_line = f"<b>{nm}</b>" if nm != tk else f"<b>{tk}</b>"
-                tk_line = f"<span style='color:#888;font-size:0.82em'>{tk}</span>" if nm != tk else ""
-                st.markdown(
-                    f"<div style='background:#1C1C2E;border-radius:10px;padding:12px 14px;margin-bottom:8px'>"
-                    f"{nm_line}<br>{tk_line}"
-                    f"<div style='font-size:1.4em;font-weight:700;margin-top:4px'>${d['price']:,.2f}</div>"
-                    f"<div style='color:{c}'>{arrow} {sign}{d['change']:,.2f}　({sign}{d['pct']:.2f}%)</div>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
+                    page_id = ticker_to_page_charts.get(tk)
+                    if page_id and st.button(f"移除 {tk}", key=f"charts_rm_{tk}", use_container_width=True):
+                        with st.spinner(f"移除 {tk}..."):
+                            try:
+                                delete_trade(page_id)
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"移除失敗：{e}")
 
-    st.caption("固定清單請在 .streamlit/secrets.toml 新增：`WATCHLIST = [\"2330.TW\", \"0050.TW\"]`　報價每 2 分鐘快取。")
+    st.caption("觀察清單永久保存於 Notion，重新整理不會消失。報價每 2 分鐘快取。")

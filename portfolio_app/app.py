@@ -11,6 +11,7 @@ from utils.pnl_calculator import TERM_LABELS
 from utils.ticker_names import get_name
 from utils.auth import require_login
 from utils.portfolio_loader import load_portfolio
+from utils.notion_loader import fetch_watchlist, add_to_watchlist, delete_trade
 
 st.set_page_config(
     page_title="投資組合",
@@ -88,14 +89,9 @@ r2c3.metric("已實現損益（含平倉）", f"${realized:,.0f}",
 st.divider()
 
 # ── 觀察清單資料（Tab 用）────────────────────────────────────────────────────
-_default_watch = ["2330.TW", "2308.TW", "0050.TW", "00878.TW", "NVDA"]
-try:
-    _fixed_watch = list(st.secrets.get("WATCHLIST", _default_watch))
-except Exception:
-    _fixed_watch = _default_watch
-
-if "watchlist_extra" not in st.session_state:
-    st.session_state.watchlist_extra = []
+@st.cache_data(ttl=60)
+def _load_watch_items_home(user: str) -> list[dict]:
+    return fetch_watchlist(user)
 
 
 @st.cache_data(ttl=120)
@@ -359,7 +355,9 @@ with chart_col2:
                     use_container_width=True, config={"displayModeBar": False})
 
 with tab_watch:
-    all_watch = _fixed_watch + st.session_state.watchlist_extra
+    _watch_items_home = _load_watch_items_home(current_user)
+    _watch_tickers_home = [item["ticker"] for item in _watch_items_home if item["ticker"]]
+    _ticker_to_page_home = {item["ticker"]: item["page_id"] for item in _watch_items_home}
 
     wa_col, wb_col = st.columns([5, 1])
     with wa_col:
@@ -369,46 +367,70 @@ with tab_watch:
         ).strip().upper()
     with wb_col:
         if st.button("新增", key="watch_add_home", use_container_width=True):
-            if new_watch and new_watch not in all_watch:
-                st.session_state.watchlist_extra.append(new_watch)
-                st.rerun()
+            if not new_watch:
+                st.warning("請輸入代號")
+            elif new_watch in _watch_tickers_home:
+                st.warning(f"{new_watch} 已在清單中")
+            else:
+                with st.spinner("新增中..."):
+                    try:
+                        add_to_watchlist(new_watch, current_user)
+                        st.cache_data.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"新增失敗：{e}")
 
-    with st.spinner("載入觀察清單報價..."):
-        watch_data = load_watchlist(tuple(all_watch))
+    if not _watch_tickers_home:
+        st.info("觀察清單為空，請輸入股票代號新增。")
+    else:
+        with st.spinner("載入觀察清單報價..."):
+            watch_data = load_watchlist(tuple(_watch_tickers_home))
 
-    for i in range(0, len(watch_data), 2):
-        wcols = st.columns(2)
-        for j, d in enumerate(watch_data[i: i + 2]):
-            tk = d["ticker"]
-            nm = get_name(tk)
-            header = (
-                f"{nm} <span style='color:#888;font-size:0.82em'>({tk})</span>"
-                if nm != tk else tk
-            )
-            with wcols[j]:
-                if not d["ok"]:
-                    st.markdown(
-                        f"<div style='background:#1C1C2E;border-radius:12px;padding:16px 18px;margin-bottom:4px;'>"
-                        f"<div style='font-size:1.05em;font-weight:700;margin-bottom:6px;'>{header}</div>"
-                        f"<div style='color:#666'>無法取得報價</div></div>",
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    c = COLOR_UP if d["change"] > 0 else (COLOR_DOWN if d["change"] < 0 else COLOR_NEUTRAL)
-                    arrow = pnl_arrow(d["change"])
-                    sign = "+" if d["change"] >= 0 else ""
-                    st.markdown(
-                        f"<div style='background:#1C1C2E;border-radius:12px;padding:16px 18px;margin-bottom:4px;'>"
-                        f"<div style='font-size:1.05em;font-weight:700;margin-bottom:6px;'>{header}</div>"
-                        f"<div style='font-size:1.4em;font-weight:600;margin-bottom:4px;'>${d['price']:,.2f}</div>"
-                        f"<div style='font-size:1em;color:{c};'>"
-                        f"{arrow} {sign}{d['change']:,.2f}　({sign}{d['pct']:.2f}%)</div>"
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )
-                if st.button("📈 走勢圖", key=f"watch_chart_{tk}", use_container_width=True):
-                    st.session_state["chart_ticker"] = tk
-                    st.switch_page("pages/1_charts.py")
+        for i in range(0, len(watch_data), 2):
+            wcols = st.columns(2)
+            for j, d in enumerate(watch_data[i: i + 2]):
+                tk = d["ticker"]
+                nm = get_name(tk)
+                header = (
+                    f"{nm} <span style='color:#888;font-size:0.82em'>({tk})</span>"
+                    if nm != tk else tk
+                )
+                with wcols[j]:
+                    if not d["ok"]:
+                        st.markdown(
+                            f"<div style='background:#1C1C2E;border-radius:12px;padding:16px 18px;margin-bottom:4px;'>"
+                            f"<div style='font-size:1.05em;font-weight:700;margin-bottom:6px;'>{header}</div>"
+                            f"<div style='color:#666'>無法取得報價</div></div>",
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        c = COLOR_UP if d["change"] > 0 else (COLOR_DOWN if d["change"] < 0 else COLOR_NEUTRAL)
+                        arrow = pnl_arrow(d["change"])
+                        sign = "+" if d["change"] >= 0 else ""
+                        st.markdown(
+                            f"<div style='background:#1C1C2E;border-radius:12px;padding:16px 18px;margin-bottom:4px;'>"
+                            f"<div style='font-size:1.05em;font-weight:700;margin-bottom:6px;'>{header}</div>"
+                            f"<div style='font-size:1.4em;font-weight:600;margin-bottom:4px;'>${d['price']:,.2f}</div>"
+                            f"<div style='font-size:1em;color:{c};'>"
+                            f"{arrow} {sign}{d['change']:,.2f}　({sign}{d['pct']:.2f}%)</div>"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
+                    btn_c1, btn_c2 = st.columns(2)
+                    with btn_c1:
+                        if st.button("📈 走勢圖", key=f"watch_chart_{tk}", use_container_width=True):
+                            st.session_state["chart_ticker"] = tk
+                            st.switch_page("pages/1_charts.py")
+                    with btn_c2:
+                        page_id_home = _ticker_to_page_home.get(tk)
+                        if page_id_home and st.button("移除", key=f"home_rm_{tk}", use_container_width=True):
+                            with st.spinner(f"移除 {tk}..."):
+                                try:
+                                    delete_trade(page_id_home)
+                                    st.cache_data.clear()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"移除失敗：{e}")
 
 st.divider()
 st.caption(
