@@ -72,7 +72,6 @@ with st.sidebar:
         ["長/中/短期分開", "合計折線"],
         index=0,
     )
-    show_realized = st.checkbox("顯示已實現損益", value=True)
     show_cash = st.checkbox("顯示現金", value=True)
 
 # ── 繪製 Stacked Area Chart ───────────────────────────────────────────────────
@@ -88,17 +87,6 @@ if view_mode == "長/中/短期分開":
             fillcolor="rgba(102,102,102,0.6)",
             line=dict(color="rgba(102,102,102,0.8)", width=1),
             hovertemplate="現金<br>%{x}: $%{y:,.0f}<extra></extra>",
-        ))
-
-    # 已實現損益
-    if show_realized:
-        fig.add_trace(go.Scatter(
-            x=acc_df.index, y=acc_df["realized_pnl"].clip(lower=0),
-            name="已實現損益",
-            stackgroup="one",
-            fillcolor="rgba(212,175,55,0.5)",
-            line=dict(color="rgba(212,175,55,0.8)", width=1),
-            hovertemplate="已實現<br>%{x}: $%{y:,.0f}<extra></extra>",
         ))
 
     # 短期
