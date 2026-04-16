@@ -3,6 +3,12 @@
 - 帳號密碼存在 .streamlit/secrets.toml 的 [USERS] 區塊
 - 登入後在瀏覽器寫入 HMAC cookie，下次自動認證，無需重新登入
 - 主動登出才會清除 cookie
+
+關鍵設計：
+  CookieController 是非同步元件，第一次 render 時 JS 尚未就緒，
+  ctrl.get() 回傳 None。等元件觸發 rerun 後才有真實值。
+  因此第一次 render 設旗標後 st.stop()，讓元件完成初始化，
+  第二次 render 才讀取 cookie。
 """
 
 from __future__ import annotations
@@ -17,7 +23,7 @@ except ImportError:
     _COOKIES_AVAILABLE = False
 
 COOKIE_NAME = "portfolio_auth"
-COOKIE_MAX_AGE = 365 * 24 * 3600  # 1 年（秒）
+COOKIE_MAX_AGE = 365 * 24 * 3600  # 1 年
 
 
 # ── Token 工具 ────────────────────────────────────────────────────────────────
@@ -59,16 +65,25 @@ def require_login() -> str:
     if ctrl is not None:
         try:
             cookie_val = ctrl.get(COOKIE_NAME)
+
             if cookie_val:
+                # Cookie 有值 → 驗證後自動登入
                 username = _validate_cookie(cookie_val)
                 if username:
                     st.session_state["auth_user"] = username
                     _show_sidebar_user(ctrl)
                     return username
+
+            elif "_auth_cookie_checked" not in st.session_state:
+                # 第一次 render：元件 JS 尚未就緒，cookie_val 是 None
+                # 設旗標後停住，等元件觸發 rerun 再讀一次
+                st.session_state["_auth_cookie_checked"] = True
+                st.stop()
+
         except Exception:
             pass
 
-    # 3. 顯示登入表單
+    # 3. 確認無有效 cookie → 顯示登入表單
     _show_login_form(ctrl)
     st.stop()
 
@@ -91,6 +106,7 @@ def _show_login_form(ctrl) -> None:
             users: dict = dict(st.secrets.get("USERS", {}))
             if username in users and str(users[username]) == str(password):
                 st.session_state["auth_user"] = username
+                st.session_state.pop("_auth_cookie_checked", None)  # 重置旗標
                 # 寫入 cookie（永久保持登入，直到登出）
                 if ctrl is not None:
                     try:
@@ -107,12 +123,12 @@ def _show_sidebar_user(ctrl) -> None:
     with st.sidebar:
         st.caption(f"👤 {st.session_state['auth_user']}")
         if st.button("登出", key="_logout_btn", use_container_width=True):
-            # 清除 cookie
             if ctrl is not None:
                 try:
                     ctrl.remove(COOKIE_NAME)
                 except Exception:
                     pass
             st.session_state.pop("auth_user", None)
+            st.session_state.pop("_auth_cookie_checked", None)
             st.cache_data.clear()
             st.rerun()
