@@ -141,7 +141,7 @@ GitHub → Actions → Daily Market Report → Run workflow
 ### 總覽頁（app.py）
 - [x] 6 格 Metric cards（總資產、現金、持倉市值、總成本、未實現損益、已實現損益）
 - [x] 長/中/短期 Tab 持倉卡片（中文名稱 + 代號、持有天數、成本均價、現價、損益）
-- [x] 小卡走勢用跳視窗的（@st.dialog modal，含 K 線 + MA20 + 買賣標記）
+- [x] 小卡走勢用跳視窗的（@st.dialog modal，含日/週/月K、時間範圍、MA5/MA20/MA60、停損停利線、成交量副圖、買賣標記）
 - [x] 資產配置圓餅圖（從 12 點逆時針：長期→中期→短期→現金）
 - [x] 圓餅圖自訂 HTML 圖例（依期別分組，含現金）
 - [x] 短期顏色改為琥珀/橘色（避免與台灣市場紅漲慣例混淆）
@@ -186,5 +186,8 @@ GitHub → Actions → Daily Market Report → Run workflow
 
 ### USER
 - [x] 加入使用者（獨立 Notion DB per user，secrets.toml 管帳密）
-- [ ] 使用者可以不用頻繁重新登入 
-- [ ] 登出要always出現在BAR
+- [x] 使用者可以不用頻繁重新登入（AUTO_LOGIN_USER 模式：secrets 設定後跳過登入，適合單人專屬部署）
+- [ ] 登出要always出現在BAR（AUTO_LOGIN_USER 模式下已隱藏登出，login 模式下正常顯示）
+- [x] 雙用戶部署：app_user2.py 用 exec 執行 app.py，作為第二個 Streamlit Cloud deployment 的 entry point
+  - Streamlit Community Cloud 限制：同一 repo 只能開一個 app（用不同 main file path 繞過）
+  - 各 deployment secrets：NOTION_TOKEN、NOTION_DATABASE_ID（各自的 DB）、AUTO_LOGIN_USER（各自的 username）
