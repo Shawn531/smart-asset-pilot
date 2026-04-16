@@ -1,9 +1,15 @@
 """
-股票代號 → 中文名稱對照表
-靜態字典找不到時，自動從 yfinance 查詢 shortName 並快取。
+股票代號 → 名稱對照
+優先順序：
+  1. 靜態字典（最快，已知常用股）
+  2. TWSE API（上市台股，中文名稱）
+  3. TPEX API（上櫃台股，中文名稱）
+  4. yfinance shortName（美股等，英文）
+  5. ticker 本身
 """
 
 from __future__ import annotations
+import requests
 
 TICKER_TO_NAME: dict[str, str] = {
     # 半導體
@@ -56,27 +62,92 @@ TICKER_TO_NAME: dict[str, str] = {
     "TSLA": "TSLA",
 }
 
+# ── 動態快取 ──────────────────────────────────────────────────────────────────
+_twse_names: dict[str, str] = {}   # code (不含 .TW) → 中文名
+_tpex_names: dict[str, str] = {}   # code (不含 .TWO) → 中文名
+_yf_cache: dict[str, str] = {}     # ticker → 英文名
+_twse_fetched = False
+_tpex_fetched = False
 
-# 執行期動態查詢的快取（process 重啟才清空）
-_name_cache: dict[str, str] = {}
+
+def _load_twse() -> dict[str, str]:
+    """從 TWSE OpenAPI 載入所有上市股票中文名稱（只跑一次）"""
+    global _twse_names, _twse_fetched
+    if _twse_fetched:
+        return _twse_names
+    _twse_fetched = True
+    try:
+        resp = requests.get(
+            "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
+            timeout=10,
+        )
+        for item in resp.json():
+            code = item.get("Code", "")
+            name = item.get("Name", "")
+            if code and name:
+                _twse_names[code] = name
+    except Exception:
+        pass
+    return _twse_names
+
+
+def _load_tpex() -> dict[str, str]:
+    """從 TPEX OpenAPI 載入所有上櫃股票中文名稱（只跑一次）"""
+    global _tpex_names, _tpex_fetched
+    if _tpex_fetched:
+        return _tpex_names
+    _tpex_fetched = True
+    try:
+        resp = requests.get(
+            "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes",
+            timeout=10,
+        )
+        for item in resp.json():
+            code = item.get("SecuritiesCompanyCode", "")
+            name = item.get("CompanyName", "")
+            if code and name:
+                _tpex_names[code] = name
+    except Exception:
+        pass
+    return _tpex_names
 
 
 def get_name(ticker: str) -> str:
     """
-    取得股票名稱。
-    優先順序：靜態字典 → yfinance shortName → ticker 本身
-    查詢結果快取於 _name_cache，避免重複呼叫 API。
+    取得股票名稱（盡量回傳中文）。
+    1. 靜態字典
+    2. TWSE API（.TW 上市股）
+    3. TPEX API（.TWO 上櫃股）
+    4. yfinance shortName（美股）
+    5. ticker 本身
     """
+    # 1. 靜態字典
     if ticker in TICKER_TO_NAME:
         return TICKER_TO_NAME[ticker]
-    if ticker in _name_cache:
-        return _name_cache[ticker]
+
+    # 2. 台股上市（.TW）
+    if ticker.endswith(".TW"):
+        code = ticker[:-3]
+        names = _load_twse()
+        if code in names:
+            return names[code]
+
+    # 3. 台股上櫃（.TWO）
+    if ticker.endswith(".TWO"):
+        code = ticker[:-4]
+        names = _load_tpex()
+        if code in names:
+            return names[code]
+
+    # 4. yfinance（美股等）
+    if ticker in _yf_cache:
+        return _yf_cache[ticker]
     try:
         import yfinance as yf
         info = yf.Ticker(ticker).info
         name = info.get("shortName") or info.get("longName") or ticker
-        _name_cache[ticker] = name
+        _yf_cache[ticker] = name
         return name
     except Exception:
-        _name_cache[ticker] = ticker
+        _yf_cache[ticker] = ticker
         return ticker
