@@ -16,8 +16,10 @@ from utils.notion_loader import fetch_trades
 from utils.price_fetcher import get_history
 from utils.pnl_calculator import compute_positions
 from utils.ticker_names import get_name, TICKER_TO_NAME
+from utils.auth import require_login
 
 st.set_page_config(page_title="走勢圖", page_icon="📈", layout="wide")
+current_user = require_login()
 
 st.markdown("""
 <style>
@@ -39,11 +41,11 @@ tab_chart, tab_watch = st.tabs(["📈 個股走勢", "👁️ 觀察清單"])
 with tab_chart:
 
     @st.cache_data(ttl=300)
-    def load_trades():
-        return fetch_trades()
+    def load_trades(user: str):
+        return fetch_trades(user)
 
     try:
-        trades = load_trades()
+        trades = load_trades(current_user)
     except Exception as e:
         st.error(f"無法載入交易紀錄：{e}")
         st.stop()

@@ -15,17 +15,19 @@ from utils.pnl_calculator import (
     compute_accumulation_history, compute_positions,
     compute_summary, compute_cash, compute_all_realized_pnl,
 )
+from utils.auth import require_login
 
 st.set_page_config(page_title="資產累積", page_icon="📉", layout="wide")
+current_user = require_login()
 
 st.title("📉 資產累積時間軸")
 st.caption("每日持倉市值的歷史堆疊圖，追蹤長期財富成長曲線。")
 
 # ── 載入資料 ──────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=3600)
-def load_history():
+def load_history(user: str):
     """歷史堆疊圖用：OHLC 歷史資料"""
-    trades = fetch_trades()
+    trades = fetch_trades(user)
     if not trades:
         return pd.DataFrame(), []
     stock_tickers = list(set(
@@ -39,9 +41,9 @@ def load_history():
 
 
 @st.cache_data(ttl=300)
-def load_current():
+def load_current(user: str):
     """摘要 metrics 用：即時報價（與 app.py 相同來源）"""
-    trades = fetch_trades()
+    trades = fetch_trades(user)
     if not trades:
         return {}, 0.0
     positions = compute_positions(trades)
@@ -54,8 +56,8 @@ def load_current():
 
 with st.spinner("計算歷史資產累積（首次載入需要較長時間）..."):
     try:
-        acc_df, trades = load_history()
-        summary, cash_now = load_current()
+        acc_df, trades = load_history(current_user)
+        summary, cash_now = load_current(current_user)
     except Exception as e:
         st.error(f"計算失敗：{e}")
         st.stop()

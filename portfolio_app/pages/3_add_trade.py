@@ -7,8 +7,10 @@ import streamlit as st
 from datetime import date
 
 from utils.notion_loader import add_trade
+from utils.auth import require_login
 
 st.set_page_config(page_title="新增交易", page_icon="➕", layout="wide")
+current_user = require_login()
 
 st.markdown("""
 <style>
@@ -128,6 +130,7 @@ if record_type == "📈 股票交易":
                     fee=fee,
                     reason=reason.strip(),
                     note=note.strip(),
+                    user=current_user,
                 )
                 action_zh = "買入" if action == "buy" else "賣出"
                 term_zh = {"long": "長期", "mid": "中期", "short": "短期"}[term]
@@ -180,6 +183,7 @@ else:
                     price=cash_amount,
                     fee=0.0,
                     reason=cash_reason.strip() or ("入金" if action == "deposit" else "出金"),
+                    user=current_user,
                 )
                 action_zh = "入金" if action == "deposit" else "出金"
                 st.success(f"✅ 已記錄：{action_zh} ${cash_amount:,.0f}")

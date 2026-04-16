@@ -9,8 +9,10 @@ from datetime import date
 
 from utils.notion_loader import fetch_trades, delete_trade, update_trade
 from utils.ticker_names import get_name
+from utils.auth import require_login
 
 st.set_page_config(page_title="交易紀錄", page_icon="📋", layout="wide")
+current_user = require_login()
 
 st.markdown("""
 <style>
@@ -33,12 +35,12 @@ ACTION_COLORS = {
 }
 
 @st.cache_data(ttl=300)
-def load_trades():
-    return fetch_trades()
+def load_trades(user: str):
+    return fetch_trades(user)
 
 with st.spinner("載入交易紀錄..."):
     try:
-        trades = load_trades()
+        trades = load_trades(current_user)
     except Exception as e:
         st.error(f"無法載入資料：{e}")
         st.stop()

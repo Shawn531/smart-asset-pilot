@@ -14,6 +14,7 @@ from utils.pnl_calculator import (
     compute_total_buy_cost_by_ticker, TERM_LABELS,
 )
 from utils.ticker_names import get_name
+from utils.auth import require_login
 
 st.set_page_config(
     page_title="投資組合",
@@ -21,6 +22,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+current_user = require_login()
 
 st.markdown("""
 <style>
@@ -58,8 +61,8 @@ with st.sidebar:
 
 
 @st.cache_data(ttl=300)
-def load_data():
-    trades = fetch_trades()
+def load_data(user: str):
+    trades = fetch_trades(user)
     positions = compute_positions(trades)
     tickers = list(positions.keys())
     prices = get_current_prices(tickers) if tickers else {}
@@ -75,7 +78,7 @@ st.title("📊 投資組合總覽")
 
 with st.spinner("載入資料中..."):
     try:
-        trades, positions, prices, summary, cash, realized_by_ticker, total_buy_cost_by_ticker = load_data()
+        trades, positions, prices, summary, cash, realized_by_ticker, total_buy_cost_by_ticker = load_data(current_user)
     except Exception as e:
         st.error(f"資料載入失敗：{e}")
         st.stop()

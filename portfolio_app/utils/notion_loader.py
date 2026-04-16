@@ -15,18 +15,28 @@ def _get_client() -> Client:
     return Client(auth=st.secrets["NOTION_TOKEN"])
 
 
-def _get_db_id() -> str:
+def _get_db_id(user: str | None = None) -> str:
+    """
+    回傳指定用戶的 Notion Database ID。
+    優先查 [USER_DB] 區塊，找不到則 fallback 到 NOTION_DATABASE_ID。
+    """
+    if user:
+        user_db: dict = dict(st.secrets.get("USER_DB", {}))
+        if user in user_db:
+            return str(user_db[user])
     return st.secrets["NOTION_DATABASE_ID"]
 
 
-def fetch_trades() -> list[dict]:
+def fetch_trades(user: str | None = None) -> list[dict]:
     """
     從 Notion Database 讀取所有交易紀錄，回傳 list of dict。
     每筆包含 page_id（供刪除使用）。
     action: "buy" | "sell" | "deposit" | "withdraw"
+
+    user: 用來決定查哪個 Notion Database（每位用戶獨立 DB）。
     """
     client = _get_client()
-    db_id = _get_db_id()
+    db_id = _get_db_id(user)
 
     results = []
     cursor = None
@@ -77,14 +87,16 @@ def add_trade(
     fee: float,
     reason: str,
     note: str = "",
+    user: str = "",
 ) -> None:
     """
     新增一筆紀錄到 Notion Database。
     action: "buy" | "sell" | "deposit" | "withdraw"
     現金入金/出金時 ticker="CASH"，shares=1，price=金額
+    user: 目前登入的使用者名稱（用於選擇對應的 Notion DB）
     """
     client = _get_client()
-    db_id = _get_db_id()
+    db_id = _get_db_id(user or None)
 
     action_names = {
         "buy": "買入", "sell": "賣出",
