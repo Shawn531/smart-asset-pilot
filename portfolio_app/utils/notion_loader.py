@@ -85,6 +85,7 @@ def fetch_watchlist(user: str | None = None) -> list[dict]:
     """
     從 Notion Database 讀取觀察清單（action="watch"）。
     回傳 list of dict，每筆包含 page_id 與 ticker。
+    不使用 server-side filter，以免 "watch" 尚未成為 select option 時拋錯。
     """
     client = _get_client()
     db_id = _get_db_id(user)
@@ -93,11 +94,7 @@ def fetch_watchlist(user: str | None = None) -> list[dict]:
     cursor = None
 
     while True:
-        kwargs = {
-            "database_id": db_id,
-            "filter": {"property": "action", "select": {"equals": "watch"}},
-            "page_size": 100,
-        }
+        kwargs = {"database_id": db_id, "page_size": 100}
         if cursor:
             kwargs["start_cursor"] = cursor
 
@@ -114,6 +111,7 @@ def fetch_watchlist(user: str | None = None) -> list[dict]:
             "ticker": _get_select(page["properties"], "ticker"),
         }
         for page in results
+        if _get_select(page["properties"], "action") == "watch"
     ]
 
 
