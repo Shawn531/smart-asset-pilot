@@ -5,6 +5,7 @@
 
 import streamlit as st
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import yfinance as yf
 import pandas as pd
 from datetime import date, timedelta
@@ -14,6 +15,7 @@ from utils.ticker_names import get_name
 from utils.auth import require_login
 from utils.portfolio_loader import load_portfolio
 from utils.notion_loader import fetch_watchlist, add_to_watchlist, delete_trade
+from utils.price_fetcher import get_history
 
 st.set_page_config(
     page_title="投資組合",
@@ -92,82 +94,125 @@ st.divider()
 
 # ── 走勢圖 Modal ──────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300)
-def _fetch_chart_data(ticker: str) -> pd.DataFrame:
-    end = date.today()
-    start = end - timedelta(days=180)
-    df = yf.Ticker(ticker).history(start=start, end=end)
-    df.index = pd.to_datetime(df.index).tz_localize(None)
-    return df
+def _fetch_chart_data(ticker: str, start: str, interval: str) -> pd.DataFrame:
+    return get_history(ticker, start=start, interval=interval)
 
 
 @st.dialog("📈 走勢圖", width="large")
 def show_mini_chart(ticker: str, trades_list: list):
-    st.caption(f"**{get_name(ticker)}**　`{ticker}`　近 6 個月")
+    name = get_name(ticker)
+    title_str = f"{name}（{ticker}）" if name != ticker else ticker
+    st.caption(f"**{title_str}**")
 
-    df = _fetch_chart_data(ticker)
+    # ── 控制列第一行：K線週期 + 時間範圍 ────────────────────────────────────
+    ctrl1, ctrl2 = st.columns([3, 3])
+    with ctrl1:
+        kline_period = st.radio(
+            "K線週期", ["日K", "週K", "月K"],
+            horizontal=True, key="modal_kline",
+        )
+        interval_map = {"日K": "1d", "週K": "1wk", "月K": "1mo"}
+        interval = interval_map[kline_period]
+    with ctrl2:
+        period_options = {"3個月": 90, "6個月": 180, "1年": 365, "2年": 730, "5年": 1825}
+        period_label = st.selectbox(
+            "時間範圍", list(period_options.keys()), index=1, key="modal_period",
+        )
+        period_days = period_options[period_label]
+
+    # ── 控制列第二行：均線 + 停損停利 ────────────────────────────────────────
+    ma_col1, ma_col2, ma_col3, sl_col, tp_col = st.columns([1, 1, 1, 2, 2])
+    with ma_col1:
+        show_ma5  = st.checkbox("MA5",  value=True,  key="modal_ma5")
+    with ma_col2:
+        show_ma20 = st.checkbox("MA20", value=True,  key="modal_ma20")
+    with ma_col3:
+        show_ma60 = st.checkbox("MA60", value=False, key="modal_ma60")
+    with sl_col:
+        stop_loss    = st.number_input("停損價", min_value=0.0, value=0.0, step=1.0, format="%.2f", key="modal_sl")
+    with tp_col:
+        target_price = st.number_input("停利價", min_value=0.0, value=0.0, step=1.0, format="%.2f", key="modal_tp")
+
+    # ── 載入資料 ──────────────────────────────────────────────────────────────
+    start_date = date.today() - timedelta(days=period_days)
+    df = _fetch_chart_data(ticker, str(start_date), interval)
     if df.empty:
         st.warning("無法取得歷史資料")
         return
 
-    # MA20
+    df["MA5"]  = df["Close"].rolling(5).mean()
     df["MA20"] = df["Close"].rolling(20).mean()
+    df["MA60"] = df["Close"].rolling(60).mean()
 
-    fig = go.Figure()
+    # 篩選時間範圍內的買賣紀錄
+    ticker_trades = [
+        t for t in trades_list
+        if t.get("ticker") == ticker and t.get("date", "") >= str(start_date)
+    ]
+    buy_tr  = [t for t in ticker_trades if t["action"] == "buy"]
+    sell_tr = [t for t in ticker_trades if t["action"] == "sell"]
+
+    # ── 繪圖 ─────────────────────────────────────────────────────────────────
+    fig = make_subplots(
+        rows=2, cols=1, shared_xaxes=True,
+        row_heights=[0.75, 0.25], vertical_spacing=0.03,
+    )
 
     # K 線
     fig.add_trace(go.Candlestick(
         x=df.index, open=df["Open"], high=df["High"],
         low=df["Low"], close=df["Close"],
         increasing_line_color="#E05C5C", decreasing_line_color="#4CAF82",
-        name="K線", showlegend=False,
-    ))
+        name="K線",
+    ), row=1, col=1)
 
-    # MA20
-    fig.add_trace(go.Scatter(
-        x=df.index, y=df["MA20"],
-        line=dict(color="#FFA500", width=1.5),
-        name="MA20",
-    ))
+    # 均線
+    if show_ma5:
+        fig.add_trace(go.Scatter(x=df.index, y=df["MA5"],  name="MA5",  line=dict(color="#FFD700", width=1)), row=1, col=1)
+    if show_ma20:
+        fig.add_trace(go.Scatter(x=df.index, y=df["MA20"], name="MA20", line=dict(color="#87CEEB", width=1)), row=1, col=1)
+    if show_ma60:
+        fig.add_trace(go.Scatter(x=df.index, y=df["MA60"], name="MA60", line=dict(color="#DDA0DD", width=1)), row=1, col=1)
 
-    # 買賣標記
-    t_buy_x, t_buy_y, t_sell_x, t_sell_y = [], [], [], []
-    for t in trades_list:
-        if t.get("ticker") != ticker or not t.get("date"):
-            continue
-        try:
-            d = pd.Timestamp(t["date"])
-        except Exception:
-            continue
-        p = t.get("price") or 0
-        if t.get("action") == "buy":
-            t_buy_x.append(d); t_buy_y.append(p)
-        elif t.get("action") == "sell":
-            t_sell_x.append(d); t_sell_y.append(p)
-
-    if t_buy_x:
+    # 買入/賣出標記
+    if buy_tr:
         fig.add_trace(go.Scatter(
-            x=t_buy_x, y=t_buy_y, mode="markers",
-            marker=dict(symbol="triangle-up", size=12, color="#FFD700"),
-            name="買入",
-        ))
-    if t_sell_x:
+            x=[t["date"] for t in buy_tr], y=[t["price"] for t in buy_tr],
+            mode="markers",
+            marker=dict(symbol="triangle-up", size=14, color="#FFD700", line=dict(color="#000", width=1)),
+            name="買入", hovertemplate="買入<br>%{x}<br>$%{y:,.2f}<extra></extra>",
+        ), row=1, col=1)
+    if sell_tr:
         fig.add_trace(go.Scatter(
-            x=t_sell_x, y=t_sell_y, mode="markers",
-            marker=dict(symbol="triangle-down", size=12, color="#00FFFF"),
-            name="賣出",
-        ))
+            x=[t["date"] for t in sell_tr], y=[t["price"] for t in sell_tr],
+            mode="markers",
+            marker=dict(symbol="triangle-down", size=14, color="#00E5FF", line=dict(color="#000", width=1)),
+            name="賣出", hovertemplate="賣出<br>%{x}<br>$%{y:,.2f}<extra></extra>",
+        ), row=1, col=1)
+
+    # 停損/停利線
+    if target_price > 0:
+        fig.add_hline(y=target_price, line_dash="dash", line_color="#FFD700",
+                      annotation_text=f"停利 ${target_price:,.2f}", annotation_position="top right", row=1, col=1)
+    if stop_loss > 0:
+        fig.add_hline(y=stop_loss, line_dash="dash", line_color="#FF6B6B",
+                      annotation_text=f"停損 ${stop_loss:,.2f}", annotation_position="bottom right", row=1, col=1)
+
+    # 成交量
+    vol_colors = ["#E05C5C" if c >= o else "#4CAF82" for c, o in zip(df["Close"], df["Open"])]
+    fig.add_trace(go.Bar(
+        x=df.index, y=df["Volume"], marker_color=vol_colors,
+        name="成交量", showlegend=False,
+    ), row=2, col=1)
 
     fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="#0E1117",
-        font_color="#FAFAFA",
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0E1117", font_color="#FAFAFA",
         xaxis_rangeslider_visible=False,
-        height=420,
-        margin=dict(t=10, b=10, l=10, r=10),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        yaxis=dict(gridcolor="#222", tickprefix="$"),
-        xaxis=dict(gridcolor="#222"),
+        height=540, margin=dict(t=20, b=10, l=10, r=10),
     )
+    fig.update_xaxes(gridcolor="#222", zeroline=False)
+    fig.update_yaxes(gridcolor="#222", zeroline=False)
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     if st.button("完整走勢圖頁面 →", use_container_width=True):
