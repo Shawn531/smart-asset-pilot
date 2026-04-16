@@ -145,7 +145,7 @@ GitHub → Actions → Daily Market Report → Run workflow
 - [x] 圓餅圖自訂 HTML 圖例（依期別分組，含現金）
 - [x] 短期顏色改為琥珀/橘色（避免與台灣市場紅漲慣例混淆）
 - [x] 未實現損益 % ｜ 未實現損益 $ ｜ 已實現損益 % ｜ 已實現損益 $，切換後只顯示對應的一張圖，各自按自己的指標排序。如果還沒有已實現損益，按鈕選項只會出現前兩個。
-- [x] Charts 整合進小卡：每張持倉卡片底部加「📈 走勢圖」按鈕，點擊直接跳轉並自動選好該股票
+- [ ] Charts 整合進小卡：每張持倉卡片底部加「📈 走勢圖」按鈕，點擊直接跳轉並自動選好該股票 -> 改為不用跳轉到charts 可以跳出視窗
 
 ### 走勢圖（1_charts.py）
 - [x] K 線蠟燭圖 + 成交量子圖
@@ -185,3 +185,5 @@ GitHub → Actions → Daily Market Report → Run workflow
 
 ### USER
 - [x] 加入使用者（獨立 Notion DB per user，secrets.toml 管帳密）
+- [x] 使用者可以不用頻繁重新登入（cookie 記住 30 天，登入時勾選「記住我」）
+- [x] 登出要always出現在BAR（側邊欄頂端固定顯示用戶名 + 登出按鈕）
