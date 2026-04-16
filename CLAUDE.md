@@ -184,4 +184,4 @@ GitHub → Actions → Daily Market Report → Run workflow
 
 
 ### USER
-- [ ] 加入使用者 
+- [x] 加入使用者（獨立 Notion DB per user，secrets.toml 管帳密）
