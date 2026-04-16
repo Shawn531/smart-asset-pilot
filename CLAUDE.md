@@ -185,5 +185,5 @@ GitHub → Actions → Daily Market Report → Run workflow
 
 ### USER
 - [x] 加入使用者（獨立 Notion DB per user，secrets.toml 管帳密）
-- [x] 使用者可以不用頻繁重新登入（cookie 記住 30 天，登入時勾選「記住我」）
+- [ ] 使用者可以不用頻繁重新登入 ⏸ cookie 方案干擾 data rendering，待改用其他方式
 - [x] 登出要always出現在BAR（側邊欄頂端固定顯示用戶名 + 登出按鈕）
