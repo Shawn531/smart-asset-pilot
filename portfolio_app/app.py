@@ -6,6 +6,8 @@
 import streamlit as st
 import plotly.graph_objects as go
 import yfinance as yf
+import pandas as pd
+from datetime import date, timedelta
 
 from utils.pnl_calculator import TERM_LABELS
 from utils.ticker_names import get_name
@@ -88,6 +90,91 @@ r2c3.metric("已實現損益（含平倉）", f"${realized:,.0f}",
 
 st.divider()
 
+# ── 走勢圖 Modal ──────────────────────────────────────────────────────────────
+@st.cache_data(ttl=300)
+def _fetch_chart_data(ticker: str) -> pd.DataFrame:
+    end = date.today()
+    start = end - timedelta(days=180)
+    df = yf.Ticker(ticker).history(start=start, end=end)
+    df.index = pd.to_datetime(df.index).tz_localize(None)
+    return df
+
+
+@st.dialog("📈 走勢圖", width="large")
+def show_mini_chart(ticker: str, trades_list: list):
+    st.caption(f"**{get_name(ticker)}**　`{ticker}`　近 6 個月")
+
+    df = _fetch_chart_data(ticker)
+    if df.empty:
+        st.warning("無法取得歷史資料")
+        return
+
+    # MA20
+    df["MA20"] = df["Close"].rolling(20).mean()
+
+    fig = go.Figure()
+
+    # K 線
+    fig.add_trace(go.Candlestick(
+        x=df.index, open=df["Open"], high=df["High"],
+        low=df["Low"], close=df["Close"],
+        increasing_line_color="#E05C5C", decreasing_line_color="#4CAF82",
+        name="K線", showlegend=False,
+    ))
+
+    # MA20
+    fig.add_trace(go.Scatter(
+        x=df.index, y=df["MA20"],
+        line=dict(color="#FFA500", width=1.5),
+        name="MA20",
+    ))
+
+    # 買賣標記
+    t_buy_x, t_buy_y, t_sell_x, t_sell_y = [], [], [], []
+    for t in trades_list:
+        if t.get("ticker") != ticker or not t.get("date"):
+            continue
+        try:
+            d = pd.Timestamp(t["date"])
+        except Exception:
+            continue
+        p = t.get("price") or 0
+        if t.get("action") == "buy":
+            t_buy_x.append(d); t_buy_y.append(p)
+        elif t.get("action") == "sell":
+            t_sell_x.append(d); t_sell_y.append(p)
+
+    if t_buy_x:
+        fig.add_trace(go.Scatter(
+            x=t_buy_x, y=t_buy_y, mode="markers",
+            marker=dict(symbol="triangle-up", size=12, color="#FFD700"),
+            name="買入",
+        ))
+    if t_sell_x:
+        fig.add_trace(go.Scatter(
+            x=t_sell_x, y=t_sell_y, mode="markers",
+            marker=dict(symbol="triangle-down", size=12, color="#00FFFF"),
+            name="賣出",
+        ))
+
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="#0E1117",
+        font_color="#FAFAFA",
+        xaxis_rangeslider_visible=False,
+        height=420,
+        margin=dict(t=10, b=10, l=10, r=10),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        yaxis=dict(gridcolor="#222", tickprefix="$"),
+        xaxis=dict(gridcolor="#222"),
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    if st.button("完整走勢圖頁面 →", use_container_width=True):
+        st.session_state["chart_ticker"] = ticker
+        st.switch_page("pages/1_charts.py")
+
+
 # ── 觀察清單資料（Tab 用）────────────────────────────────────────────────────
 @st.cache_data(ttl=60)
 def _load_watch_items_home(user: str) -> list[dict]:
@@ -169,8 +256,7 @@ for tab, term_key in zip([tab_long, tab_mid, tab_short], ["long", "mid", "short"
 </div>""", unsafe_allow_html=True)
                     if st.button("📈 走勢圖", key=f"goto_chart_{ticker}_{term_key}",
                                  use_container_width=True):
-                        st.session_state["chart_ticker"] = ticker
-                        st.switch_page("pages/1_charts.py")
+                        show_mini_chart(ticker, trades)
 
 st.divider()
 
@@ -419,8 +505,7 @@ with tab_watch:
                     btn_c1, btn_c2 = st.columns(2)
                     with btn_c1:
                         if st.button("📈 走勢圖", key=f"watch_chart_{tk}", use_container_width=True):
-                            st.session_state["chart_ticker"] = tk
-                            st.switch_page("pages/1_charts.py")
+                            show_mini_chart(tk, trades)
                     with btn_c2:
                         page_id_home = _ticker_to_page_home.get(tk)
                         if page_id_home and st.button("移除", key=f"home_rm_{tk}", use_container_width=True):
