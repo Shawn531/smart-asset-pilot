@@ -184,4 +184,4 @@ GitHub → Actions → Daily Market Report → Run workflow
 
 
 ### USER
-- [ ] 加入使用者
+- [ ] 加入使用者 
