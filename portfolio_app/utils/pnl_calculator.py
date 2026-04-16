@@ -304,20 +304,21 @@ def compute_accumulation_history(
                 cost_per_share = (shares * price + fee) / shares
                 lots[ticker].append({"shares": shares, "cost": cost_per_share})
                 term_map[ticker] = term
-            elif action == "sell" and ticker != "CASH" and ticker in lots:
-                running_cash += shares * price - fee
-                sell_price_net = price - fee / shares
-                remaining = shares
-                while remaining > 0 and lots[ticker]:
-                    lot = lots[ticker][0]
-                    if lot["shares"] <= remaining:
-                        realized[ticker] = realized.get(ticker, 0.0) + (sell_price_net - lot["cost"]) * lot["shares"]
-                        remaining -= lot["shares"]
-                        lots[ticker].popleft()
-                    else:
-                        realized[ticker] = realized.get(ticker, 0.0) + (sell_price_net - lot["cost"]) * remaining
-                        lot["shares"] -= remaining
-                        remaining = 0
+            elif action == "sell" and ticker != "CASH":
+                running_cash += shares * price - fee  # 現金永遠更新，與 compute_cash 一致
+                if ticker in lots:  # FIFO lots 只在有持倉時才操作
+                    sell_price_net = price - fee / shares
+                    remaining = shares
+                    while remaining > 0 and lots[ticker]:
+                        lot = lots[ticker][0]
+                        if lot["shares"] <= remaining:
+                            realized[ticker] = realized.get(ticker, 0.0) + (sell_price_net - lot["cost"]) * lot["shares"]
+                            remaining -= lot["shares"]
+                            lots[ticker].popleft()
+                        else:
+                            realized[ticker] = realized.get(ticker, 0.0) + (sell_price_net - lot["cost"]) * remaining
+                            lot["shares"] -= remaining
+                            remaining = 0
 
             trade_idx += 1
 
