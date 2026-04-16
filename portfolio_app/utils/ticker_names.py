@@ -1,5 +1,6 @@
 """
 股票代號 → 中文名稱對照表
+靜態字典找不到時，自動從 yfinance 查詢 shortName 並快取。
 """
 
 from __future__ import annotations
@@ -56,6 +57,26 @@ TICKER_TO_NAME: dict[str, str] = {
 }
 
 
+# 執行期動態查詢的快取（process 重啟才清空）
+_name_cache: dict[str, str] = {}
+
+
 def get_name(ticker: str) -> str:
-    """取得股票中文名稱，找不到則回傳 ticker 本身"""
-    return TICKER_TO_NAME.get(ticker, ticker)
+    """
+    取得股票名稱。
+    優先順序：靜態字典 → yfinance shortName → ticker 本身
+    查詢結果快取於 _name_cache，避免重複呼叫 API。
+    """
+    if ticker in TICKER_TO_NAME:
+        return TICKER_TO_NAME[ticker]
+    if ticker in _name_cache:
+        return _name_cache[ticker]
+    try:
+        import yfinance as yf
+        info = yf.Ticker(ticker).info
+        name = info.get("shortName") or info.get("longName") or ticker
+        _name_cache[ticker] = name
+        return name
+    except Exception:
+        _name_cache[ticker] = ticker
+        return ticker
