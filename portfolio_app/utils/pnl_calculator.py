@@ -341,7 +341,7 @@ def compute_accumulation_history(
                 term_values[term] += total_shares * close
 
         total_realized = sum(realized.values())
-        total = running_cash + sum(term_values.values()) + total_realized
+        total = running_cash + sum(term_values.values())
 
         records.append({
             "date": dt_date,
