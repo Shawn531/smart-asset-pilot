@@ -7,15 +7,10 @@ import streamlit as st
 import plotly.graph_objects as go
 import yfinance as yf
 
-from utils.notion_loader import fetch_trades
-from utils.price_fetcher import get_current_prices
-from utils.pnl_calculator import (
-    compute_positions, compute_summary, compute_cash,
-    compute_all_realized_pnl, compute_realized_pnl_by_ticker,
-    compute_total_buy_cost_by_ticker, TERM_LABELS,
-)
+from utils.pnl_calculator import TERM_LABELS
 from utils.ticker_names import get_name
 from utils.auth import require_login
+from utils.portfolio_loader import load_portfolio
 
 st.set_page_config(
     page_title="投資組合",
@@ -61,25 +56,11 @@ with st.sidebar:
         st.rerun()
 
 
-@st.cache_data(ttl=300)
-def load_data(user: str):
-    trades = fetch_trades(user)
-    positions = compute_positions(trades)
-    tickers = list(positions.keys())
-    prices = get_current_prices(tickers) if tickers else {}
-    summary = compute_summary(positions, prices)
-    summary["total_realized_pnl"] = compute_all_realized_pnl(trades)
-    cash = compute_cash(trades)
-    realized_by_ticker = compute_realized_pnl_by_ticker(trades)
-    total_buy_cost_by_ticker = compute_total_buy_cost_by_ticker(trades)
-    return trades, positions, prices, summary, cash, realized_by_ticker, total_buy_cost_by_ticker
-
-
 st.title("📊 投資組合總覽")
 
 with st.spinner("載入資料中..."):
     try:
-        trades, positions, prices, summary, cash, realized_by_ticker, total_buy_cost_by_ticker = load_data(current_user)
+        trades, positions, prices, summary, cash, realized_by_ticker, total_buy_cost_by_ticker = load_portfolio(current_user)
     except Exception as e:
         st.error(f"資料載入失敗：{e}")
         st.stop()

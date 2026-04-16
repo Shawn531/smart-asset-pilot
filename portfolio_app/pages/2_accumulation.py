@@ -10,12 +10,10 @@ import pandas as pd
 from datetime import date
 
 from utils.notion_loader import fetch_trades
-from utils.price_fetcher import get_multi_history, get_current_prices
-from utils.pnl_calculator import (
-    compute_accumulation_history, compute_positions,
-    compute_summary, compute_cash, compute_all_realized_pnl,
-)
+from utils.price_fetcher import get_multi_history
+from utils.pnl_calculator import compute_accumulation_history
 from utils.auth import require_login
+from utils.portfolio_loader import load_portfolio
 
 st.set_page_config(page_title="資產累積", page_icon="📉", layout="wide")
 current_user = require_login()
@@ -40,24 +38,12 @@ def load_history(user: str):
     return df, trades
 
 
-@st.cache_data(ttl=300)
-def load_current(user: str):
-    """摘要 metrics 用：即時報價（與 app.py 相同來源）"""
-    trades = fetch_trades(user)
-    if not trades:
-        return {}, 0.0
-    positions = compute_positions(trades)
-    prices = get_current_prices(list(positions.keys())) if positions else {}
-    summary = compute_summary(positions, prices)
-    summary["total_realized_pnl"] = compute_all_realized_pnl(trades)
-    cash = compute_cash(trades)
-    return summary, cash
-
-
 with st.spinner("計算歷史資產累積（首次載入需要較長時間）..."):
     try:
         acc_df, trades = load_history(current_user)
-        summary, cash_now = load_current(current_user)
+        # 即時 metrics 與 app.py 共用同一 cache（load_portfolio）
+        _portfolio = load_portfolio(current_user)
+        trades_rt, _, _, summary, cash_now, _, _ = _portfolio
     except Exception as e:
         st.error(f"計算失敗：{e}")
         st.stop()
